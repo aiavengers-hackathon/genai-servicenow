@@ -13,7 +13,7 @@ const client = new OpenAI({
 });
 
 async function detectIntent(message) {
-  const prompt = `
+const prompt = `
 You are an enterprise ServiceNow AI Agent.
 
 Analyze the message and return ONLY valid JSON.
@@ -28,7 +28,16 @@ Extract:
 - intent
 - application
 - category
+- subcategory
 - short_description
+- assignment_group
+- urgency
+- impact
+
+Rules:
+- VPN issues → incident
+- Access requests → access_request
+- Greetings → greeting
 
 Message:
 ${message}
