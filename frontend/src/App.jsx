@@ -1,139 +1,116 @@
 import { useState } from "react";
+
 import axios from "axios";
 
+import Sidebar from "./components/Sidebar";
+import ChatMessage from "./components/ChatMessage";
+import TypingIndicator from "./components/TypingIndicator";
+import SuggestionChips from "./components/SuggestionChips";
+import ChatInput from "./components/ChatInput";
+
 export default function App() {
-  const [message, setMessage] =
-    useState("");
 
   const [messages, setMessages] =
     useState([]);
 
-  async function sendMessage() {
-    if (!message) return;
+  const [message, setMessage] =
+    useState("");
 
-    const userMessage = {
-      sender: "user",
-      text: message,
-    };
+  const [loading, setLoading] =
+    useState(false);
 
-    setMessages(prev => [
+  async function sendMessage(
+    customMessage
+  ) {
+
+    const finalMessage =
+      customMessage || message;
+
+    if (!finalMessage) return;
+
+    setMessages((prev) => [
       ...prev,
-      userMessage,
+      {
+        sender: "user",
+        text: finalMessage,
+      },
     ]);
 
-    const response =
-      await axios.post(
-        "http://localhost:5000/api/chat",
+    setLoading(true);
+
+    try {
+
+      const response =
+        await axios.post(
+          "http://localhost:5000/api/chat",
+          {
+            message: finalMessage,
+            userId: "user-1",
+          }
+        );
+
+      setMessages((prev) => [
+        ...prev,
         {
-          message,
-          userId: "user-1",
-        }
-      );
+          sender: "bot",
+          text: response.data.reply,
+        },
+      ]);
 
-    const botMessage = {
-      sender: "bot",
-      text: response.data.reply,
-    };
+    } catch (err) {
 
-    setMessages(prev => [
-      ...prev,
-      botMessage,
-    ]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "bot",
+          text:
+            "Something went wrong.",
+        },
+      ]);
+    }
+
+    setLoading(false);
 
     setMessage("");
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        background: "#0f172a",
-        color: "white",
-      }}
-    >
-      {/* Sidebar */}
-      <div
-        style={{
-          width: "250px",
-          background: "#111827",
-          padding: "20px",
-        }}
-      >
-        <h2>AI Service Desk</h2>
 
-        <p>Enterprise AI Agent</p>
-      </div>
+    <div className="flex h-screen bg-slate-950 text-white">
 
-      {/* Main */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        {/* Chat */}
-        <div
-          style={{
-            flex: 1,
-            padding: "20px",
-            overflowY: "auto",
-          }}
-        >
-          {messages.map((msg, index) => (
-            <div
-              key={index}
-              style={{
-                marginBottom: "12px",
-                padding: "14px",
-                borderRadius: "12px",
-                background:
-                  msg.sender === "user"
-                    ? "#2563eb"
-                    : "#1e293b",
-              }}
-            >
-              {msg.text}
-            </div>
-          ))}
-        </div>
+      <Sidebar />
 
-        {/* Input */}
-        <div
-          style={{
-            padding: "20px",
-            display: "flex",
-            gap: "10px",
-          }}
-        >
-          <input
-            value={message}
-            onChange={(e) =>
-              setMessage(e.target.value)
-            }
-            style={{
-              flex: 1,
-              padding: "14px",
-              borderRadius: "10px",
-              border: "none",
-            }}
+      <div className="flex-1 flex flex-col">
+
+        <div className="flex-1 overflow-y-auto p-8">
+
+          <SuggestionChips
+            onSelect={sendMessage}
           />
 
-          <button
-            onClick={sendMessage}
-            style={{
-              padding: "14px 20px",
-              background: "#2563eb",
-              color: "white",
-              border: "none",
-              borderRadius: "10px",
-            }}
-          >
-            Send
-          </button>
+          {messages.map((msg, index) => (
+
+            <ChatMessage
+              key={index}
+              message={msg}
+            />
+
+          ))}
+
+          {loading && (
+            <TypingIndicator />
+          )}
+
         </div>
+
+        <ChatInput
+          message={message}
+          setMessage={setMessage}
+          sendMessage={sendMessage}
+        />
+
       </div>
+
     </div>
   );
 }
