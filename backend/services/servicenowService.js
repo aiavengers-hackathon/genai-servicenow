@@ -5,19 +5,28 @@ const instance = process.env.SN_INSTANCE;
 const username = process.env.SN_USER;
 const password = process.env.SN_PASS;
 
-async function createIncident(data) {
+async function createAccessRequest(data) {
   const payload = {
-    short_description: data.short_description,
-    description: data.description,
-    category: data.category,
-    subcategory: data.subcategory,
-    urgency: data.urgency || "2",
-    impact: data.impact || "2",
-    assignment_group: data.assignment_group || "Service Desk"
+    short_description:
+      `${data.application} Access Request`,
+
+    description:
+      `User ${data.username} requested access for ${data.application}`,
+
+    assignment_group:
+      data.assignment_group,
+
+    cmdb_ci:
+      data.configuration_item,
+
+    caller_id:
+      data.username,
   };
 
+  console.log("Payload:", payload);
+
   const response = await axios.post(
-    `${instance}/api/now/table/incident`,
+    `${instance}/api/now/table/sc_request`,
     payload,
     {
       auth: {
@@ -26,7 +35,6 @@ async function createIncident(data) {
       },
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/json",
       },
     }
   );
@@ -35,5 +43,5 @@ async function createIncident(data) {
 }
 
 module.exports = {
-  createIncident,
+  createAccessRequest,
 };

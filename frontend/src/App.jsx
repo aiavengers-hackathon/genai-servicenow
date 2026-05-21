@@ -1,73 +1,136 @@
-import { useState } from 'react';
-import axios from 'axios';
-
-import ChatWindow from './components/ChatWindow';
-import IncidentCard from './components/IncidentCard';
+import { useState } from "react";
+import axios from "axios";
 
 export default function App() {
-  const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState([]);
-  const [incident, setIncident] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [message, setMessage] =
+    useState("");
 
-  const handleSubmit = async () => {
+  const [messages, setMessages] =
+    useState([]);
+
+  async function sendMessage() {
     if (!message) return;
 
-    setMessages(prev => [...prev, `User: ${message}`]);
+    const userMessage = {
+      sender: "user",
+      text: message,
+    };
 
-    setLoading(true);
+    setMessages(prev => [
+      ...prev,
+      userMessage,
+    ]);
 
-    try {
-      const response = await axios.post(
-        'http://localhost:5000/api/incidents/create',
+    const response =
+      await axios.post(
+        "http://localhost:5000/api/chat",
         {
           message,
+          userId: "user-1",
         }
       );
 
-      setIncident(response.data.incident);
+    const botMessage = {
+      sender: "bot",
+      text: response.data.reply,
+    };
 
-      setMessages(prev => [
-        ...prev,
-        `AI: Incident ${response.data.incident.number} created successfully.`
-      ]);
-    } catch (err) {
-      console.error(err);
+    setMessages(prev => [
+      ...prev,
+      botMessage,
+    ]);
 
-      setMessages(prev => [
-        ...prev,
-        'AI: Failed to create incident.'
-      ]);
-    }
-
-    setLoading(false);
-    setMessage('');
-  };
+    setMessage("");
+  }
 
   return (
-    <div className="app">
-      <div className="sidebar">
+    <div
+      style={{
+        display: "flex",
+        height: "100vh",
+        background: "#0f172a",
+        color: "white",
+      }}
+    >
+      {/* Sidebar */}
+      <div
+        style={{
+          width: "250px",
+          background: "#111827",
+          padding: "20px",
+        }}
+      >
         <h2>AI Service Desk</h2>
 
         <p>Enterprise AI Agent</p>
       </div>
 
-      <div className="main">
-        <div className="chat-container">
-          <ChatWindow messages={messages} />
-
-          <IncidentCard incident={incident} />
+      {/* Main */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {/* Chat */}
+        <div
+          style={{
+            flex: 1,
+            padding: "20px",
+            overflowY: "auto",
+          }}
+        >
+          {messages.map((msg, index) => (
+            <div
+              key={index}
+              style={{
+                marginBottom: "12px",
+                padding: "14px",
+                borderRadius: "12px",
+                background:
+                  msg.sender === "user"
+                    ? "#2563eb"
+                    : "#1e293b",
+              }}
+            >
+              {msg.text}
+            </div>
+          ))}
         </div>
 
-        <div className="input-container">
+        {/* Input */}
+        <div
+          style={{
+            padding: "20px",
+            display: "flex",
+            gap: "10px",
+          }}
+        >
           <input
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Describe your issue..."
+            onChange={(e) =>
+              setMessage(e.target.value)
+            }
+            style={{
+              flex: 1,
+              padding: "14px",
+              borderRadius: "10px",
+              border: "none",
+            }}
           />
 
-          <button onClick={handleSubmit} disabled={loading}>
-            {loading ? 'Processing...' : 'Send'}
+          <button
+            onClick={sendMessage}
+            style={{
+              padding: "14px 20px",
+              background: "#2563eb",
+              color: "white",
+              border: "none",
+              borderRadius: "10px",
+            }}
+          >
+            Send
           </button>
         </div>
       </div>

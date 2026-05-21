@@ -12,23 +12,25 @@ const client = new OpenAI({
   },
 });
 
-async function analyzeUserRequest(message) {
+async function detectIntent(message) {
   const prompt = `
 You are an enterprise ServiceNow AI Agent.
 
-Analyze the user message and return ONLY valid JSON.
+Analyze the message and return ONLY valid JSON.
 
-Fields:
-- type
+Possible intents:
+- greeting
+- incident
+- access_request
+- service_request
+
+Extract:
+- intent
+- application
 - category
-- subcategory
-- urgency
-- impact
-- assignment_group
 - short_description
-- description
 
-User Message:
+Message:
 ${message}
 `;
 
@@ -37,7 +39,7 @@ ${message}
     messages: [
       {
         role: "system",
-        content: "You are a ServiceNow ITSM AI assistant."
+        content: "You are an intelligent ITSM AI assistant."
       },
       {
         role: "user",
@@ -47,11 +49,11 @@ ${message}
     temperature: 0.2,
   });
 
-  const text = response.choices[0].message.content;
-
-  return JSON.parse(text);
+  return JSON.parse(
+    response.choices[0].message.content
+  );
 }
 
 module.exports = {
-  analyzeUserRequest,
+  detectIntent,
 };
