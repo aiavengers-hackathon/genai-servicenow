@@ -1,60 +1,87 @@
-const applicationMappings = {
+const mappings = {
   BAAMR: {
     assignment_group: "RD Clinical",
     configuration_item: "BAAMR Application",
   },
 
-  SAP: {
-    assignment_group: "SAP Support",
-    configuration_item: "SAP ECC",
-  },
-
   VPN: {
     assignment_group: "Network Team",
     configuration_item: "Corporate VPN",
+    category: "Network",
+    subcategory: "VPN",
   },
 };
 
-function handleWorkflow(session, aiData, message) {
+function handleWorkflow(
+  session,
+  aiData,
+  message
+) {
+
   // Greeting
   if (aiData.intent === "greeting") {
     return {
-      reply: "Hello! How can I help you today?",
+      reply:
+        "Hello! How can I help you today?",
     };
   }
 
-  // Access Request Flow
-  if (aiData.intent === "access_request") {
-    session.workflow = "access_request";
+  // INCIDENT FLOW
+  if (aiData.intent === "incident") {
+
+    session.workflow = "incident";
 
     const app =
-      aiData.application?.toUpperCase();
-
-    session.collectedData.application = app;
+      aiData.application || "VPN";
 
     const mapping =
-      applicationMappings[app];
+      mappings[app.toUpperCase()];
 
-    if (mapping) {
-      session.collectedData.assignment_group =
-        mapping.assignment_group;
+    session.collectedData = {
+      application: app,
+      assignment_group:
+        mapping?.assignment_group,
 
-      session.collectedData.configuration_item =
-        mapping.configuration_item;
-    }
+      configuration_item:
+        mapping?.configuration_item,
 
-    if (!session.collectedData.username) {
-      session.awaitingField = "username";
+      category:
+        mapping?.category,
 
-      return {
-        reply: `Sure — I can help with ${app} access.\n\nPlease provide your username.`,
-      };
-    }
+      subcategory:
+        mapping?.subcategory,
+
+      short_description:
+        aiData.short_description,
+
+      urgency:
+        aiData.urgency || "1",
+
+      impact:
+        aiData.impact || "1",
+    };
+
+    session.awaitingField = "incident_details";
+
+    return {
+      reply:
+`I can help create an incident for ${app} issues.
+
+Please provide:
+1. Your username
+2. Error message
+3. Is this impacting your work?`,
+    };
   }
 
-  // Username collection
-  if (session.awaitingField === "username") {
-    session.collectedData.username = message;
+  // INCIDENT DETAILS COLLECTION
+  if (
+    session.awaitingField ===
+    "incident_details"
+  ) {
+
+    session.collectedData.description =
+      message;
 
     session.awaitingField = null;
 
@@ -62,30 +89,126 @@ function handleWorkflow(session, aiData, message) {
 
     return {
       reply:
-`Please confirm the request:
+`Please confirm incident details:
 
-Application: ${session.collectedData.application}
-Username: ${session.collectedData.username}
-Assignment Group: ${session.collectedData.assignment_group}
-Configuration Item: ${session.collectedData.configuration_item}
+Category:
+${session.collectedData.category}
 
-Type CONFIRM to create the request.`,
+Subcategory:
+${session.collectedData.subcategory}
+
+Assignment Group:
+${session.collectedData.assignment_group}
+
+Configuration Item:
+${session.collectedData.configuration_item}
+
+Priority:
+High
+
+Short Description:
+${session.collectedData.short_description}
+
+Description:
+${session.collectedData.description}
+
+Type CONFIRM to create incident.`,
     };
   }
 
-  // Confirmation
+  // ACCESS REQUEST FLOW
+  if (aiData.intent === "access_request") {
+
+    session.workflow = "access_request";
+
+    const app =
+      aiData.application?.toUpperCase();
+
+    const mapping = mappings[app];
+
+    session.collectedData = {
+      application: app,
+
+      assignment_group:
+        mapping?.assignment_group,
+
+      configuration_item:
+        mapping?.configuration_item,
+    };
+
+    session.awaitingField = "username";
+
+    return {
+      reply:
+`Sure — I can help with ${app} access.
+
+Please provide your username.`,
+    };
+  }
+
+  // ACCESS USERNAME
+  if (
+    session.awaitingField === "username"
+  ) {
+
+    session.collectedData.username =
+      message;
+
+    session.awaitingField = null;
+
+    session.awaitingConfirmation = true;
+
+    return {
+      reply:
+`Please confirm request details:
+
+Application:
+${session.collectedData.application}
+
+Username:
+${session.collectedData.username}
+
+Assignment Group:
+${session.collectedData.assignment_group}
+
+Configuration Item:
+${session.collectedData.configuration_item}
+
+Type CONFIRM to create request.`,
+    };
+  }
+
+  // FINAL CONFIRMATION
   if (
     session.awaitingConfirmation &&
     message.toLowerCase() === "confirm"
   ) {
-    return {
-      action: "CREATE_REQUEST",
-      data: session.collectedData,
-    };
+
+    if (
+      session.workflow === "incident"
+    ) {
+
+      return {
+        action: "CREATE_INCIDENT",
+        data: session.collectedData,
+      };
+    }
+
+    if (
+      session.workflow ===
+      "access_request"
+    ) {
+
+      return {
+        action: "CREATE_REQUEST",
+        data: session.collectedData,
+      };
+    }
   }
 
   return {
-    reply: "Could you please provide more details?",
+    reply:
+      "Could you please provide more details?",
   };
 }
 
