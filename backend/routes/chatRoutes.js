@@ -3,8 +3,8 @@ const express = require("express");
 const router = express.Router();
 
 const {
-  detectIntent,
-} = require("../services/aiService");
+  processMessage,
+} = require("../services/workflowService");
 
 const {
   createIncident,
@@ -17,53 +17,83 @@ const {
 } = require("../memory/sessionStore");
 
 /**
- * APPLICATION MAPPINGS
- */
-const mappings = {
-  VPN: {
-    assignment_group: "Network Team",
-    configuration_item: "Corporate VPN",
-    category: "Network",
-    subcategory: "VPN",
-  },
-
-  BAAMR: {
-    assignment_group: "RD Clinical",
-    configuration_item: "BAAMR Application",
-  },
-
-  SAP: {
-    assignment_group: "SAP Support",
-    configuration_item: "SAP ECC",
-  },
-};
-
-/**
- * CHAT API
+ * MAIN CHAT ROUTE
  */
 router.post("/", async (req, res) => {
 
   try {
 
-    const { message, userId } = req.body;
+    const {
+      message,
+      userId,
+    } = req.body;
 
-    const session = getSession(userId);
+    if (!message || !userId) {
+
+      return res.status(400).json({
+        error:
+          "message and userId are required",
+      });
+    }
 
     /**
-     * STEP 1:
+     * GET USER SESSION
+     */
+    const session =
+      getSession(userId);
+
+    console.log(
+      "SESSION:",
+      JSON.stringify(session, null, 2)
+    );
+
+    /**
+     * NORMALIZE MESSAGE
+     */
+    const normalizedMessage =
+      message.trim();
+
+    /**
+     * ======================================
+     * CANCEL FLOW
+     * ======================================
+     */
+    if (
+      normalizedMessage.toLowerCase() ===
+      "cancel"
+    ) {
+
+      clearSession(userId);
+
+      return res.json({
+        reply:
+          "Current request cancelled successfully.",
+      });
+    }
+
+    /**
+     * ======================================
      * CONFIRMATION FLOW
+     * ======================================
      */
     if (
       session.awaitingConfirmation &&
-      message.toLowerCase() === "confirm"
+      normalizedMessage.toLowerCase() ===
+      "confirm"
     ) {
 
       /**
        * INCIDENT CREATION
        */
       if (
-        session.workflow === "incident"
+        session.workflow ===
+        "incident"
       ) {
+
+        console.log(
+          "CREATING INCIDENT:",
+          session.collectedData
+        );
 
         const incident =
           await createIncident(
@@ -73,11 +103,18 @@ router.post("/", async (req, res) => {
         clearSession(userId);
 
         return res.json({
+
           reply:
 `Incident created successfully.
 
 Incident Number:
-${incident.number}`,
+${incident.number}
+
+Application:
+${session.collectedData.application}
+
+Assignment Group:
+${session.collectedData.assignment_group}`,
         });
       }
 
@@ -89,6 +126,11 @@ ${incident.number}`,
         "access_request"
       ) {
 
+        console.log(
+          "CREATING ACCESS REQUEST:",
+          session.collectedData
+        );
+
         const request =
           await createAccessRequest(
             session.collectedData
@@ -97,42 +139,71 @@ ${incident.number}`,
         clearSession(userId);
 
         return res.json({
+
           reply:
-`Request created successfully.
+`Access request created successfully.
 
 Request Number:
-${request.number}`,
+${request.number}
+
+Application:
+${session.collectedData.application}`,
         });
       }
+
+      /**
+       * UNKNOWN WORKFLOW
+       */
+      clearSession(userId);
+
+      return res.json({
+        reply:
+          "Workflow completed.",
+      });
     }
 
     /**
-     * STEP 2:
-     * COLLECT MISSING FIELDS
+     * ======================================
+     * INCIDENT DETAILS FLOW
+     * ======================================
+     *
+     * IMPORTANT:
+     * DO NOT CALL AI AGAIN
+     * CONTINUE EXISTING WORKFLOW
      */
-
-    // INCIDENT DETAILS
     if (
+      session.workflow === "incident" &&
       session.awaitingField ===
       "incident_details"
     ) {
 
+      /**
+       * STORE DESCRIPTION
+       */
       session.collectedData.description =
-        message;
+        normalizedMessage;
 
+      /**
+       * UPDATE SESSION
+       */
       session.awaitingField = null;
 
-      session.awaitingConfirmation = true;
+      session.awaitingConfirmation =
+        true;
 
       return res.json({
+
         reply:
-`Please confirm incident details:
+`Please confirm incident creation.
 
-Category:
-${session.collectedData.category}
+Application:
+${session.collectedData.application}
 
-Subcategory:
-${session.collectedData.subcategory}
+Short Description:
+${session.collectedData.short_description}
+
+Issue Description:
+${session.collectedData.description}
 
 Assignment Group:
 ${session.collectedData.assignment_group}
@@ -143,32 +214,44 @@ ${session.collectedData.configuration_item}
 Priority:
 High
 
-Short Description:
-${session.collectedData.short_description}
-
-Description:
-${session.collectedData.description}
-
-Type CONFIRM to create incident.`,
+Type CONFIRM to create the incident
+or CANCEL to abort.`,
       });
     }
 
-    // USERNAME COLLECTION
+    /**
+     * ======================================
+     * USERNAME COLLECTION FLOW
+     * ======================================
+     *
+     * IMPORTANT:
+     * DO NOT CALL AI AGAIN
+     */
     if (
+      session.workflow ===
+        "access_request" &&
       session.awaitingField ===
-      "username"
+        "username"
     ) {
 
+      /**
+       * STORE USERNAME
+       */
       session.collectedData.username =
-        message;
+        normalizedMessage;
 
+      /**
+       * UPDATE SESSION
+       */
       session.awaitingField = null;
 
-      session.awaitingConfirmation = true;
+      session.awaitingConfirmation =
+        true;
 
       return res.json({
+
         reply:
-`Please confirm request details:
+`Please confirm access request.
 
 Application:
 ${session.collectedData.application}
@@ -182,158 +265,74 @@ ${session.collectedData.assignment_group}
 Configuration Item:
 ${session.collectedData.configuration_item}
 
-Type CONFIRM to create request.`,
+Catalog Item:
+${session.collectedData.catalog_item || "Not Available"}
+
+Type CONFIRM to create the request
+or CANCEL to abort.`,
       });
     }
 
     /**
-     * STEP 3:
-     * DETECT INTENT
-     */
-    const aiData =
-      await detectIntent(message);
-
-    console.log(
-      "AI RESPONSE:",
-      aiData
-    );
-
-    /**
-     * GREETING
+     * ======================================
+     * EXISTING ACTIVE WORKFLOW
+     * ======================================
      */
     if (
-      aiData.intent === "greeting"
+      session.workflow &&
+      !session.awaitingField &&
+      !session.awaitingConfirmation
     ) {
 
       return res.json({
         reply:
-          "Hello! How can I help you today?",
+          "An active workflow already exists. Please type CONFIRM or CANCEL.",
       });
     }
 
     /**
-     * INCIDENT FLOW
+     * ======================================
+     * MAIN AI WORKFLOW
+     * ======================================
+     *
+     * AI SHOULD ONLY RUN
+     * FOR NEW REQUESTS
      */
-    if (
-      aiData.intent === "incident"
-    ) {
+    const response =
+      await processMessage(
+        session,
+        normalizedMessage
+      );
 
-      session.workflow = "incident";
-
-      const app =
-        (
-          aiData.application ||
-          "VPN"
-        ).toUpperCase();
-
-      const mapping =
-        mappings[app];
-
-      session.collectedData = {
-
-        application: app,
-
-        category:
-          mapping?.category ||
-          "Network",
-
-        subcategory:
-          mapping?.subcategory ||
-          "General",
-
-        assignment_group:
-          mapping?.assignment_group ||
-          "Service Desk",
-
-        configuration_item:
-          mapping?.configuration_item ||
-          app,
-
-        short_description:
-          aiData.short_description ||
-          `${app} issue`,
-
-        urgency:
-          aiData.urgency || "1",
-
-        impact:
-          aiData.impact || "1",
-      };
-
-      session.awaitingField =
-        "incident_details";
+    /**
+     * SAFETY FALLBACK
+     */
+    if (!response) {
 
       return res.json({
         reply:
-`I can help create an incident for ${app} issues.
-
-Please provide:
-1. Your username
-2. Error message
-3. Is this impacting your work?`,
+          "I could not process your request.",
       });
     }
 
-    /**
-     * ACCESS REQUEST FLOW
-     */
-    if (
-      aiData.intent ===
-      "access_request"
-    ) {
-
-      session.workflow =
-        "access_request";
-
-      const app =
-        aiData.application?.toUpperCase();
-
-      const mapping =
-        mappings[app];
-
-      session.collectedData = {
-
-        application: app,
-
-        assignment_group:
-          mapping?.assignment_group ||
-          "Service Desk",
-
-        configuration_item:
-          mapping?.configuration_item ||
-          app,
-      };
-
-      session.awaitingField =
-        "username";
-
-      return res.json({
-        reply:
-`Sure — I can help with ${app} access.
-
-Please provide your username.`,
-      });
-    }
-
-    /**
-     * FALLBACK
-     */
-    return res.json({
-      reply:
-        "Could you please provide more details?",
-    });
+    return res.json(response);
 
   } catch (err) {
 
     console.error(
       "CHAT ERROR:",
-      err.response?.data || err.message
+      err.response?.data ||
+      err.message
     );
 
-    res.status(500).json({
+    return res.status(500).json({
+
+      success: false,
+
       error:
         err.response?.data ||
-        err.message,
+        err.message ||
+        "Internal server error",
     });
   }
 });

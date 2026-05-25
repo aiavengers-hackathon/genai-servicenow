@@ -1,26 +1,39 @@
 const express = require("express");
+
 const router = express.Router();
 
-const { analyzeUserRequest } = require("../services/aiService");
-const { createIncident } = require("../services/servicenowService");
+const {
+  createIncident,
+} = require("../services/servicenowService");
 
+/**
+ * DIRECT INCIDENT CREATION
+ */
 router.post("/create", async (req, res) => {
+
   try {
-    const { message } = req.body;
 
-    const aiResponse = await analyzeUserRequest(message);
+    const incidentData =
+      req.body;
 
-    const incident = await createIncident(aiResponse);
+    const incident =
+      await createIncident(
+        incidentData
+      );
 
-    res.json({
+    return res.json({
       success: true,
-      aiResponse,
       incident,
     });
-  } catch (err) {
-    console.error(err);
 
-    res.status(500).json({
+  } catch (err) {
+
+    console.error(
+      "INCIDENT ERROR:",
+      err.message
+    );
+
+    return res.status(500).json({
       success: false,
       error: err.message,
     });

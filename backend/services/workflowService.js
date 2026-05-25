@@ -1,217 +1,501 @@
-const mappings = {
-  BAAMR: {
-    assignment_group: "RD Clinical",
-    configuration_item: "BAAMR Application",
-  },
+const {
+  detectIntent,
+} = require("./aiService");
 
-  VPN: {
-    assignment_group: "Network Team",
-    configuration_item: "Corporate VPN",
-    category: "Network",
-    subcategory: "VPN",
-  },
-};
+const {
+  searchKB,
+} = require("./kbService");
 
-function handleWorkflow(
+const {
+  findApplication,
+} = require("./cmdbService");
+
+const {
+  findAccessCatalog,
+} = require("./catalogService");
+
+/**
+ * MAIN WORKFLOW ENGINE
+ */
+async function processMessage(
   session,
-  aiData,
   message
 ) {
 
-  // Greeting
-  if (aiData.intent === "greeting") {
+  /**
+   * =========================================
+   * STEP 1
+   * AI UNDERSTANDING
+   * ONLY FOR NEW REQUESTS
+   * =========================================
+   */
+  const aiData =
+    await detectIntent(
+      message,
+      session
+    );
+
+  console.log(
+    "AI DATA:",
+    JSON.stringify(aiData, null, 2)
+  );
+
+  /**
+   * =========================================
+   * GREETING
+   * =========================================
+   */
+  if (
+    aiData.intent === "greeting"
+  ) {
+
     return {
       reply:
-        "Hello! How can I help you today?",
+        "Hello! How can I assist you today?",
     };
   }
 
-  // INCIDENT FLOW
-  if (aiData.intent === "incident") {
+  /**
+   * =========================================
+   * APPLICATION LOOKUP
+   * =========================================
+   */
+  if (
+    aiData.intent ===
+    "application_lookup"
+  ) {
 
-    session.workflow = "incident";
+    const application =
+      await findApplication(
+        aiData.application
+      );
 
-    const app =
-      aiData.application || "VPN";
+    if (!application) {
 
-    const mapping =
-      mappings[app.toUpperCase()];
+      return {
+        reply:
+`I could not find the application "${aiData.application}" in ServiceNow CMDB.`,
+      };
+    }
+
+    /**
+     * SEARCH KB
+     */
+    const kbArticles =
+      await searchKB(
+        aiData.application
+      );
+
+    /**
+     * SEARCH CATALOG
+     */
+    const catalogItem =
+      await findAccessCatalog(
+        aiData.application
+      );
+
+    let response =
+`I found the application "${application.name}" in ServiceNow.
+
+Support Group:
+${application.support_group?.display_value || "Not Available"}
+
+Business Criticality:
+${application.business_criticality || "Not Available"}
+`;
+
+    /**
+     * KB ARTICLES
+     */
+    if (kbArticles.length > 0) {
+
+      response += `
+
+Knowledge Articles:
+`;
+
+      kbArticles
+        .slice(0, 3)
+        .forEach((kb, index) => {
+
+          response += `
+${index + 1}. ${kb.short_description}`;
+        });
+    }
+
+    /**
+     * CATALOG
+     */
+    if (catalogItem) {
+
+      response += `
+
+Catalog Item:
+${catalogItem.name}`;
+    }
+
+    return {
+      reply: response,
+    };
+  }
+
+  /**
+   * =========================================
+   * ACCESS REQUEST FLOW
+   * =========================================
+   */
+  if (
+    aiData.intent ===
+      "access_request" ||
+
+    aiData.intent ===
+      "application_access"
+  ) {
+
+    /**
+     * FIND APPLICATION
+     */
+    const application =
+      await findApplication(
+        aiData.application
+      );
+
+    /**
+     * APPLICATION NOT FOUND
+     */
+    if (!application) {
+
+      return {
+        reply:
+`I could not find the application "${aiData.application}" in ServiceNow CMDB.
+
+Please verify the application name.`,
+      };
+    }
+
+    /**
+     * SEARCH KB
+     */
+    const kbArticles =
+      await searchKB(
+        aiData.application
+      );
+
+    /**
+     * SEARCH CATALOG
+     */
+    const catalogItem =
+      await findAccessCatalog(
+        aiData.application
+      );
+
+    /**
+     * START WORKFLOW
+     */
+    session.workflow =
+      "access_request";
+
+    session.awaitingField =
+      "username";
 
     session.collectedData = {
-      application: app,
-      assignment_group:
-        mapping?.assignment_group,
 
-      configuration_item:
-        mapping?.configuration_item,
-
-      category:
-        mapping?.category,
-
-      subcategory:
-        mapping?.subcategory,
+      application:
+        application.name,
 
       short_description:
-        aiData.short_description,
-
-      urgency:
-        aiData.urgency || "1",
-
-      impact:
-        aiData.impact || "1",
-    };
-
-    session.awaitingField = "incident_details";
-
-    return {
-      reply:
-`I can help create an incident for ${app} issues.
-
-Please provide:
-1. Your username
-2. Error message
-3. Is this impacting your work?`,
-    };
-  }
-
-  // INCIDENT DETAILS COLLECTION
-  if (
-    session.awaitingField ===
-    "incident_details"
-  ) {
-
-    session.collectedData.description =
-      message;
-
-    session.awaitingField = null;
-
-    session.awaitingConfirmation = true;
-
-    return {
-      reply:
-`Please confirm incident details:
-
-Category:
-${session.collectedData.category}
-
-Subcategory:
-${session.collectedData.subcategory}
-
-Assignment Group:
-${session.collectedData.assignment_group}
-
-Configuration Item:
-${session.collectedData.configuration_item}
-
-Priority:
-High
-
-Short Description:
-${session.collectedData.short_description}
-
-Description:
-${session.collectedData.description}
-
-Type CONFIRM to create incident.`,
-    };
-  }
-
-  // ACCESS REQUEST FLOW
-  if (aiData.intent === "access_request") {
-
-    session.workflow = "access_request";
-
-    const app =
-      aiData.application?.toUpperCase();
-
-    const mapping = mappings[app];
-
-    session.collectedData = {
-      application: app,
+        aiData.short_description ||
+        `Access request for ${application.name}`,
 
       assignment_group:
-        mapping?.assignment_group,
+        application.support_group
+          ?.display_value ||
+        "Service Desk",
 
       configuration_item:
-        mapping?.configuration_item,
+        application.name,
+
+      catalog_item:
+        catalogItem?.name || null,
     };
 
-    session.awaitingField = "username";
+    /**
+     * BUILD RESPONSE
+     */
+    let response =
+`I found the application "${application.name}" in ServiceNow.
 
-    return {
-      reply:
-`Sure — I can help with ${app} access.
-
-Please provide your username.`,
-    };
-  }
-
-  // ACCESS USERNAME
-  if (
-    session.awaitingField === "username"
-  ) {
-
-    session.collectedData.username =
-      message;
-
-    session.awaitingField = null;
-
-    session.awaitingConfirmation = true;
-
-    return {
-      reply:
-`Please confirm request details:
-
-Application:
-${session.collectedData.application}
-
-Username:
-${session.collectedData.username}
-
-Assignment Group:
+Support Group:
 ${session.collectedData.assignment_group}
+`;
 
-Configuration Item:
-${session.collectedData.configuration_item}
+    /**
+     * KB ARTICLES
+     */
+    if (kbArticles.length > 0) {
 
-Type CONFIRM to create request.`,
+      response += `
+
+Knowledge Articles:
+`;
+
+      kbArticles
+        .slice(0, 3)
+        .forEach((kb, index) => {
+
+          response += `
+${index + 1}. ${kb.short_description}`;
+        });
+    }
+
+    /**
+     * CATALOG ITEM
+     */
+    if (catalogItem) {
+
+      response += `
+
+Catalog Item:
+${catalogItem.name}`;
+    }
+
+    response += `
+
+Please provide your username to continue with the access request.`;
+
+    return {
+      reply: response,
     };
   }
 
-  // FINAL CONFIRMATION
+  /**
+   * =========================================
+   * INCIDENT FLOW
+   * =========================================
+   */
   if (
-    session.awaitingConfirmation &&
-    message.toLowerCase() === "confirm"
+
+    aiData.domain ===
+      "incident_management" ||
+
+    aiData.intent ===
+      "incident" ||
+
+    aiData.intent ===
+      "application_issue" ||
+
+    aiData.intent ===
+      "login_issue" ||
+
+    aiData.intent ===
+      "vpn_issue" ||
+
+    aiData.intent ===
+      "network_issue"
   ) {
 
-    if (
-      session.workflow === "incident"
-    ) {
+    /**
+     * FIND APPLICATION
+     */
+    const application =
+      await findApplication(
+        aiData.application
+      );
+
+    /**
+     * APPLICATION NOT FOUND
+     */
+    if (!application) {
 
       return {
-        action: "CREATE_INCIDENT",
-        data: session.collectedData,
+        reply:
+`I could not find the application "${aiData.application}" in ServiceNow CMDB.
+
+Please verify the application name.`,
       };
     }
 
-    if (
-      session.workflow ===
-      "access_request"
-    ) {
+    /**
+     * SEARCH KB
+     */
+    const kbArticles =
+      await searchKB(
+        aiData.application
+      );
 
-      return {
-        action: "CREATE_REQUEST",
-        data: session.collectedData,
-      };
+    /**
+     * START INCIDENT WORKFLOW
+     */
+    session.workflow =
+      "incident";
+
+    session.awaitingField =
+      "incident_details";
+
+    session.collectedData = {
+
+      application:
+        application.name,
+
+      category:
+        aiData.category ||
+        "Application",
+
+      subcategory:
+        aiData.subcategory ||
+        "Login Issue",
+
+      assignment_group:
+        application.support_group
+          ?.display_value ||
+        "Service Desk",
+
+      configuration_item:
+        application.name,
+
+      short_description:
+        aiData.short_description ||
+        `${application.name} issue`,
+
+      urgency:
+        aiData.urgency || "2",
+
+      impact:
+        aiData.impact || "2",
+    };
+
+    /**
+     * BUILD RESPONSE
+     */
+    let response =
+`I found "${application.name}" in ServiceNow.
+
+Support Group:
+${session.collectedData.assignment_group}
+`;
+
+    /**
+     * KB ARTICLES
+     */
+    if (kbArticles.length > 0) {
+
+      response += `
+
+Knowledge Articles:
+`;
+
+      kbArticles
+        .slice(0, 3)
+        .forEach((kb, index) => {
+
+          response += `
+${index + 1}. ${kb.short_description}`;
+        });
     }
+
+    response += `
+
+Please describe the issue you are facing.`;
+
+    return {
+      reply: response,
+    };
   }
 
+  /**
+   * =========================================
+   * KB HELP FLOW
+   * =========================================
+   */
+  if (
+
+    aiData.intent === "kb_help" ||
+
+    aiData.intent === "how_to" ||
+
+    aiData.intent === "troubleshooting"
+  ) {
+
+    const kbArticles =
+      await searchKB(
+        aiData.application ||
+        message
+      );
+
+    if (
+      kbArticles.length === 0
+    ) {
+
+      return {
+        reply:
+          "I could not find any relevant knowledge articles.",
+      };
+    }
+
+    let response =
+      "I found the following knowledge articles:\n";
+
+    kbArticles
+      .slice(0, 5)
+      .forEach((kb, index) => {
+
+        response += `
+${index + 1}. ${kb.short_description}`;
+      });
+
+    return {
+      reply: response,
+    };
+  }
+
+  /**
+   * =========================================
+   * PASSWORD RESET
+   * =========================================
+   */
+  if (
+    aiData.intent ===
+    "password_reset"
+  ) {
+
+    return {
+      reply:
+`I can help with password reset.
+
+Please use the Self-Service Password Reset portal or contact Service Desk if you are locked out.`,
+    };
+  }
+
+  /**
+   * =========================================
+   * HUMAN AGENT
+   * =========================================
+   */
+  if (
+    aiData.intent ===
+    "human_agent_request"
+  ) {
+
+    return {
+      reply:
+`I can connect you with the Service Desk team.
+
+Please provide a brief summary of your issue.`,
+    };
+  }
+
+  /**
+   * =========================================
+   * UNKNOWN / FALLBACK
+   * =========================================
+   */
   return {
+
     reply:
-      "Could you please provide more details?",
+      "I could not fully understand your request. Please provide more details or specify the application/service involved.",
   };
 }
 
 module.exports = {
-  handleWorkflow,
+  processMessage,
 };
