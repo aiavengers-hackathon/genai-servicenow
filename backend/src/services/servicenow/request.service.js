@@ -83,6 +83,174 @@ class RequestService {
   }
 
   /**
+   * SEARCH APPLICATIONS IN CMDB
+   * Validates if application exists in ServiceNow
+   * Uses cmdb_ci_business_app table for Business Applications
+   */
+  async searchApplications(appName) {
+
+    try {
+
+      logger.info(
+        "Searching for application",
+        { appName }
+      );
+
+      // Search in cmdb_ci_business_app table (Business Applications)
+      const response =
+        await axios.get(
+
+          `${this.baseURL}/api/now/table/cmdb_ci_business_app`,
+
+          {
+            params: {
+
+              sysparm_query:
+                `nameLIKE${appName}`,
+
+              sysparm_limit: 10,
+
+              sysparm_fields:
+                "sys_id,name,short_description,operational_status,owner",
+            },
+
+            auth: this.auth,
+          }
+        );
+
+      const results =
+        response.data.result || [];
+
+      logger.info(
+        "Application search results",
+        {
+          appName,
+          count: results.length,
+          results: results.map(r => ({
+            name: r.name,
+            id: r.sys_id,
+          })),
+        }
+      );
+
+      return results;
+
+    } catch (error) {
+
+      logger.error(
+        "Application search failed",
+        { error: error.message, appName }
+      );
+
+      return [];
+    }
+  }
+
+  /**
+   * VALIDATE APPLICATION
+   * Checks if application exists in ServiceNow
+   * Returns { isValid, application } or { isValid, suggestions }
+   */
+  async validateApplication(appName) {
+
+    try {
+
+      if (!appName || appName.length < 2) {
+
+        return {
+          isValid: false,
+          error: "Application name too short",
+        };
+      }
+
+      logger.info(
+        "Validating application",
+        { appName }
+      );
+
+      const results =
+        await this.searchApplications(appName);
+
+      logger.debug(
+        "Search results",
+        {
+          appName,
+          resultCount: results.length,
+          results: results.map(r => ({
+            name: r.name,
+            shortName: r.short_name,
+          })),
+        }
+      );
+
+      if (results.length === 0) {
+
+        return {
+          isValid: false,
+          error:
+            `Application "${appName}" not found in ServiceNow`,
+          suggestions: [],
+        };
+      }
+
+      // Exact match (case-insensitive)
+      const exactMatch = results.find(
+        (app) =>
+          (app.name && app.name.toLowerCase() === appName.toLowerCase()) ||
+          (app.short_name && app.short_name.toLowerCase() === appName.toLowerCase())
+      );
+
+      if (exactMatch) {
+
+        logger.info(
+          "Exact match found",
+          { appName, match: exactMatch.name }
+        );
+
+        return {
+          isValid: true,
+          application: {
+            name: exactMatch.name,
+            shortName: exactMatch.short_name,
+            sysId: exactMatch.sys_id,
+          },
+        };
+      }
+
+      // Partial matches found
+      logger.info(
+        "Partial matches found",
+        {
+          appName,
+          suggestions: results.map(r => r.name),
+        }
+      );
+
+      return {
+        isValid: false,
+        error:
+          `Exact match not found for "${appName}"`,
+        suggestions: results.map((app) => ({
+          name: app.name,
+          shortName: app.short_name,
+        })),
+      };
+
+    } catch (error) {
+
+      logger.error(
+        "Application validation error",
+        { error: error.message, appName }
+      );
+
+      return {
+        isValid: false,
+        error: "Error validating application",
+      };
+    }
+  }
+
+  /**
    * RESOLVE USERNAME TO SYS_ID
    *
    * ServiceNow stores requested_for as a sys_id reference,

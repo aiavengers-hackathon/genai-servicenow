@@ -20,31 +20,34 @@ const INTENT_TYPES = {
   KB_QUERY: "KB_QUERY",
   OUTAGE: "OUTAGE",
   CHANGE_REQUEST: "CHANGE_REQUEST",
+  REQUEST_STATUS: "REQUEST_STATUS",
   OTHER: "OTHER",
 };
 
 const INTENT_PATTERNS = {
-  // Incident patterns
+  // Incident patterns - more specific to actual issues
   INCIDENT: [
     /not\s+work/i,
     /broken/i,
     /error/i,
-    /fail/i,
-    /down/i,
+    /fail(?:ed|ure)?/i,
+    /(?:is\s+)?down/i,
     /crash/i,
     /slow/i,
-    /can't\s+access/i,
-    /unable\s+to/i,
-    /problem\s+with/i,
+    /can't\s+(?:access|login|connect)/i,
+    /unable\s+to\s+(?:access|login|connect)/i,
+    /issue\s+with/i,
   ],
-  // Access request patterns
+  // Access request patterns - more specific
   ACCESS_REQUEST: [
-    /need\s+access/i,
-    /request\s+access/i,
-    /grant\s+me/i,
+    /need\s+access\s+(?:to|for)/i,
+    /request\s+access\s+(?:to|for)/i,
+    /grant\s+me\s+access/i,
     /onboard/i,
     /provision/i,
     /add\s+to\s+group/i,
+    /get\s+access\s+(?:to|for)/i,
+    /require\s+access/i,
   ],
   // Password reset patterns
   PASSWORD_RESET: [
@@ -82,10 +85,28 @@ const INTENT_PATTERNS = {
     /license/i,
     /new\s+user/i,
   ],
+  // NEW: Request status patterns
+  REQUEST_STATUS: [
+    /status\s+of\s+(?:my\s+)?request/i,
+    /check\s+(?:my\s+)?request/i,
+    /where\s+is\s+my\s+request/i,
+    /my\s+request\s+status/i,
+    /track\s+(?:my\s+)?request/i,
+    /progress\s+of\s+(?:my\s+)?request/i,
+    /open\s+requests/i,
+    /pending\s+requests/i,
+    /my\s+tickets/i,
+    /request\s+number/i,
+    /need\s+status\s+of\s+(?:my\s+)?request/i,
+    /i\s+need\s+status/i,
+  ],
 };
 
-// FIX: Access requests have dynamic app names — never cache them
+// Access requests have dynamic app names — never cache them
 const ACCESS_REQUEST_PATTERN = /need\s+access|request\s+access|grant\s+me\s+access/i;
+
+// Request status queries — also don't cache (user may check different requests)
+const REQUEST_STATUS_PATTERN = /status\s+of\s+(?:my\s+)?request|check\s+(?:my\s+)?request|open\s+requests|my\s+tickets|track\s+(?:my\s+)?request|need\s+status/i;
 
 class IntentClassifier {
   constructor() {
@@ -101,12 +122,11 @@ class IntentClassifier {
     try {
       logger.debug("Classifying intent", { messageLength: message.length });
 
-      // FIX: Skip cache entirely for access requests
-      // Each access request may have a different app name (BAAMR, CRDSRS, etc.)
-      // Caching these causes stale application names to be reused
+      // Skip cache for dynamic queries (access requests, status checks)
       const isAccessRequest = ACCESS_REQUEST_PATTERN.test(message);
+      const isStatusQuery = REQUEST_STATUS_PATTERN.test(message);
 
-      if (!isAccessRequest) {
+      if (!isAccessRequest && !isStatusQuery) {
         const cached = this._getFromCache(message);
         if (cached) {
           logger.debug("Returning cached intent classification");
@@ -121,8 +141,8 @@ class IntentClassifier {
           confidence: patternResult.confidence,
         });
 
-        // FIX: Only cache non-access-request results
-        if (!isAccessRequest) {
+        // Only cache stable queries
+        if (!isAccessRequest && !isStatusQuery) {
           this._setCache(message, patternResult);
         }
 
@@ -132,8 +152,8 @@ class IntentClassifier {
       // Fall back to AI classification
       const aiResult = await this._classifyWithAI(message, context);
 
-      // FIX: Only cache non-access-request results
-      if (!isAccessRequest) {
+      // Only cache stable queries
+      if (!isAccessRequest && !isStatusQuery) {
         this._setCache(message, aiResult);
       }
 
@@ -239,6 +259,7 @@ INTENT TYPES:
 - KB_QUERY: How-to question, asking for steps/documentation
 - OUTAGE: Widespread service disruption affecting many users
 - CHANGE_REQUEST: Request to change system configuration
+- REQUEST_STATUS: Checking status of open requests/tickets
 - OTHER: Doesn't fit above categories
 
 CONTEXT:

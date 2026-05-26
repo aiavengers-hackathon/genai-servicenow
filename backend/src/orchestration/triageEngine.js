@@ -29,10 +29,32 @@ class TriageEngine {
     }
 
     /**
+     * REQUEST STATUS
+     * NEW: Check for status queries BEFORE access/incident
+     */
+    if (
+      /status\s+of\s+(?:my\s+)?request/i.test(lower) ||
+      /check\s+(?:my\s+)?request/i.test(lower) ||
+      /where\s+is\s+my\s+request/i.test(lower) ||
+      /open\s+requests/i.test(lower) ||
+      /my\s+tickets/i.test(lower) ||
+      /track\s+(?:my\s+)?request/i.test(lower) ||
+      /need\s+status/i.test(lower)
+    ) {
+
+      return {
+        type: "REQUEST_STATUS",
+        reply: "Fetching your requests...",
+      };
+    }
+
+    /**
      * ACCESS REQUEST
      */
     if (
-      lower.includes("access") ||
+      /need\s+access\s+(?:to|for)/i.test(lower) ||
+      /request\s+access\s+(?:to|for)/i.test(lower) ||
+      /grant\s+me\s+access/i.test(lower) ||
       lower.includes("vpn") ||
       lower.includes("permission")
     ) {
