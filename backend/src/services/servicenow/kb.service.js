@@ -24,6 +24,59 @@ class KBService {
   /**
    * SEARCH KNOWLEDGE ARTICLES
    */
+  /**
+ * FIND BEST MATCH ARTICLE
+ * AI orchestration helper
+ */
+async findBestMatch(application, issue) {
+  try {
+
+    logger.info(
+      "Finding best KB match",
+      {
+        application,
+      }
+    );
+
+    const searchQuery =
+      `${application} ${issue}`;
+
+    const articles =
+      await this.searchArticles(
+        searchQuery,
+        {
+          maxResults: 5,
+          relevanceRank: true,
+        }
+      );
+
+    if (!articles.length) {
+      return null;
+    }
+
+    /**
+     * Return top ranked article
+     */
+    return {
+      id: articles[0].id,
+      number: articles[0].number,
+      title: articles[0].title,
+      summary: articles[0].content,
+      url: articles[0].url,
+    };
+
+  } catch (error) {
+
+    logger.error(
+      "Best KB match failed",
+      {
+        error: error.message,
+      }
+    );
+
+    return null;
+  }
+}
   async searchArticles(query, options = {}) {
     try {
       const { maxResults = 10, relevanceRank = true } = options;

@@ -5,9 +5,7 @@
 const axios = require("axios");
 const logger = require("../../utils/logger");
 
-// Open request states in ServiceNow:
-// 1 = Open, 2 = Work in Progress, 3 = Pending Approval
-// 4 = Approved, 6 = Closed Complete, 7 = Closed Incomplete, 8 = Cancelled
+// Open request states
 const OPEN_STATES = ["1", "2", "3", "4"];
 
 class RequestService {
@@ -27,9 +25,186 @@ class RequestService {
       "/api/now/table/sc_req_item";
 
     this.auth = {
-      username: process.env.SN_USER,
-      password: process.env.SN_PASS,
+      username:
+        process.env.SN_USER,
+
+      password:
+        process.env.SN_PASS,
     };
+  }
+
+  /**
+   * HUMAN READABLE STATUS
+   */
+  getReadableState(state, stage) {
+
+    const normalizedStage =
+      String(stage || "")
+        .trim()
+        .toLowerCase();
+
+    const normalizedState =
+      String(state || "")
+        .trim();
+
+    /**
+     * SERVICENOW REQUEST STAGES
+     */
+    const stageMap = {
+
+      requested:
+        "Requested",
+
+      request_approved:
+        "Approved",
+
+      request_cancelled:
+        "Cancelled",
+
+      fulfillment:
+        "Fulfillment In Progress",
+
+      complete:
+        "Completed",
+
+      closed_complete:
+        "Completed",
+
+      closed_incomplete:
+        "Closed Incomplete",
+
+      
+      new:
+        "Open",
+
+      open:
+        "Open",
+
+      approval:
+        "Pending Approval",
+
+      pending_approval:
+        "Pending Approval",
+
+      work_in_progress:
+        "Work In Progress",
+
+      wip:
+        "Work In Progress",
+
+      in_progress:
+        "In Progress",
+
+      completed:
+        "Completed",
+
+      closed:
+        "Closed",
+
+      cancelled:
+        "Cancelled",
+    };
+
+    /**
+     * SERVICENOW STATES
+     */
+    const stateMap = {
+
+      "1":
+        "Open",
+
+      "2":
+        "Work In Progress",
+
+      "3":
+        "Pending Approval",
+
+      "4":
+        "Approved",
+
+      "5":
+        "Pending",
+
+      "6":
+        "Closed Complete",
+
+      "7":
+        "Closed Incomplete",
+
+      "8":
+        "Cancelled",
+    };
+
+    /**
+     * PRIORITY:
+     * stage > state
+     */
+
+    // exact stage mapping
+    if (
+      normalizedStage &&
+      stageMap[normalizedStage]
+    ) {
+
+      return stageMap[normalizedStage];
+    }
+
+    // contains logic
+    if (
+      normalizedStage.includes("approval")
+    ) {
+
+      return "Pending Approval";
+    }
+
+    if (
+      normalizedStage.includes("fulfillment")
+    ) {
+
+      return "Fulfillment In Progress";
+    }
+
+    if (
+      normalizedStage.includes("complete")
+    ) {
+
+      return "Completed";
+    }
+
+    if (
+      normalizedStage.includes("cancel")
+    ) {
+
+      return "Cancelled";
+    }
+
+    if (
+      normalizedStage.includes("progress")
+    ) {
+
+      return "Work In Progress";
+    }
+
+    // fallback to state
+    if (
+      stateMap[normalizedState]
+    ) {
+
+      return stateMap[normalizedState];
+    }
+
+    // raw stage fallback
+    if (normalizedStage) {
+
+      return normalizedStage
+        .replace(/_/g, " ")
+        .replace(
+          /\b\w/g,
+          c => c.toUpperCase()
+        );
+    }
+
+    return "Open";
   }
 
   /**
@@ -75,7 +250,10 @@ class RequestService {
 
       logger.error(
         "Catalog search failed",
-        { error: error.message }
+        {
+          error:
+            error.message,
+        }
       );
 
       return [];
@@ -83,20 +261,17 @@ class RequestService {
   }
 
   /**
-   * SEARCH APPLICATIONS IN CMDB
-   * Validates if application exists in ServiceNow
-   * Uses cmdb_ci_business_app table for Business Applications
+   * SEARCH APPLICATIONS
    */
   async searchApplications(appName) {
 
     try {
 
       logger.info(
-        "Searching for application",
+        "Searching application",
         { appName }
       );
 
-      // Search in cmdb_ci_business_app table (Business Applications)
       const response =
         await axios.get(
 
@@ -111,35 +286,27 @@ class RequestService {
               sysparm_limit: 10,
 
               sysparm_fields:
-                "sys_id,name,short_description,operational_status,owner",
+                "sys_id,name,short_description,short_name",
             },
 
             auth: this.auth,
           }
         );
 
-      const results =
-        response.data.result || [];
-
-      logger.info(
-        "Application search results",
-        {
-          appName,
-          count: results.length,
-          results: results.map(r => ({
-            name: r.name,
-            id: r.sys_id,
-          })),
-        }
+      return (
+        response.data.result || []
       );
-
-      return results;
 
     } catch (error) {
 
       logger.error(
         "Application search failed",
-        { error: error.message, appName }
+        {
+          error:
+            error.message,
+
+          appName,
+        }
       );
 
       return [];
@@ -148,125 +315,117 @@ class RequestService {
 
   /**
    * VALIDATE APPLICATION
-   * Checks if application exists in ServiceNow
-   * Returns { isValid, application } or { isValid, suggestions }
    */
   async validateApplication(appName) {
 
     try {
 
-      if (!appName || appName.length < 2) {
+      if (
+        !appName ||
+        appName.length < 2
+      ) {
 
         return {
           isValid: false,
-          error: "Application name too short",
+
+          error:
+            "Invalid application name",
         };
       }
 
-      logger.info(
-        "Validating application",
-        { appName }
-      );
-
       const results =
-        await this.searchApplications(appName);
+        await this.searchApplications(
+          appName
+        );
 
-      logger.debug(
-        "Search results",
-        {
-          appName,
-          resultCount: results.length,
-          results: results.map(r => ({
-            name: r.name,
-            shortName: r.short_name,
-          })),
-        }
-      );
-
-      if (results.length === 0) {
+      if (
+        results.length === 0
+      ) {
 
         return {
           isValid: false,
+
           error:
-            `Application "${appName}" not found in ServiceNow`,
+            `Application "${appName}" not found`,
+
           suggestions: [],
         };
       }
 
-      // Exact match (case-insensitive)
-      const exactMatch = results.find(
-        (app) =>
-          (app.name && app.name.toLowerCase() === appName.toLowerCase()) ||
-          (app.short_name && app.short_name.toLowerCase() === appName.toLowerCase())
-      );
+      const exactMatch =
+        results.find(
+          (app) =>
+
+            app.name?.toLowerCase() ===
+              appName.toLowerCase() ||
+
+            app.short_name?.toLowerCase() ===
+              appName.toLowerCase()
+        );
 
       if (exactMatch) {
 
-        logger.info(
-          "Exact match found",
-          { appName, match: exactMatch.name }
-        );
-
         return {
           isValid: true,
+
           application: {
-            name: exactMatch.name,
-            shortName: exactMatch.short_name,
-            sysId: exactMatch.sys_id,
+            name:
+              exactMatch.name,
+
+            shortName:
+              exactMatch.short_name,
+
+            sysId:
+              exactMatch.sys_id,
           },
         };
       }
 
-      // Partial matches found
-      logger.info(
-        "Partial matches found",
-        {
-          appName,
-          suggestions: results.map(r => r.name),
-        }
-      );
-
       return {
         isValid: false,
+
         error:
           `Exact match not found for "${appName}"`,
-        suggestions: results.map((app) => ({
-          name: app.name,
-          shortName: app.short_name,
-        })),
+
+        suggestions:
+          results.map(
+            (app) => ({
+              name:
+                app.name,
+
+              shortName:
+                app.short_name,
+            })
+          ),
       };
 
     } catch (error) {
 
       logger.error(
-        "Application validation error",
-        { error: error.message, appName }
+        "Application validation failed",
+        {
+          error:
+            error.message,
+        }
       );
 
       return {
         isValid: false,
-        error: "Error validating application",
+
+        error:
+          "Application validation failed",
       };
     }
   }
 
   /**
-   * RESOLVE USERNAME TO SYS_ID
-   *
-   * ServiceNow stores requested_for as a sys_id reference,
-   * not a plain username. This queries sys_user table
-   * by user_name to get the sys_id.
-   *
-   * Returns: sys_id string or null if user not found
+   * RESOLVE USER SYS_ID
    */
-  async resolveUserSysId(username) {
+  async resolveUserSysId(
+    username
+  ) {
 
     try {
-
-      logger.info(
-        "Resolving user sys_id",
-        { username }
-      );
 
       const response =
         await axios.get(
@@ -292,34 +451,23 @@ class RequestService {
       const results =
         response.data.result || [];
 
-      if (results.length > 0) {
+      if (
+        results.length > 0
+      ) {
 
-        const user = results[0];
-
-        logger.info(
-          "User sys_id resolved",
-          {
-            username,
-            sysId: user.sys_id,
-            displayName: user.name,
-          }
-        );
-
-        return user.sys_id;
+        return results[0].sys_id;
       }
-
-      logger.warn(
-        "User not found in ServiceNow",
-        { username }
-      );
 
       return null;
 
     } catch (error) {
 
       logger.error(
-        "Failed to resolve user sys_id",
-        { error: error.message }
+        "User sys_id lookup failed",
+        {
+          error:
+            error.message,
+        }
       );
 
       return null;
@@ -328,11 +476,6 @@ class RequestService {
 
   /**
    * CHECK DUPLICATE REQUEST
-   *
-   * Expects userSysId (already resolved sys_id),
-   * not a plain username. Call resolveUserSysId() first.
-   *
-   * Returns: { isDuplicate, existingRequest }
    */
   async checkDuplicateRequest(
     userSysId,
@@ -341,25 +484,22 @@ class RequestService {
 
     try {
 
-      logger.info(
-        "Checking for duplicate request",
-        { userSysId, application }
-      );
-
-      const stateQuery = OPEN_STATES
-        .map((s) => `state=${s}`)
-        .join("^OR");
+      const stateQuery =
+        OPEN_STATES
+          .map(
+            (s) => `state=${s}`
+          )
+          .join("^OR");
 
       const query = [
-        `requested_for=${userSysId}`,
-        `short_descriptionLIKE${application}`,
-        `${stateQuery}`,
-      ].join("^");
 
-      logger.info(
-        "Duplicate check query",
-        { query }
-      );
+        `requested_for=${userSysId}`,
+
+        `short_descriptionLIKE${application}`,
+
+        `${stateQuery}`,
+
+      ].join("^");
 
       const response =
         await axios.get(
@@ -369,12 +509,13 @@ class RequestService {
           {
             params: {
 
-              sysparm_query: query,
+              sysparm_query:
+                query,
 
               sysparm_limit: 1,
 
               sysparm_fields:
-                "number,short_description,state,sys_created_on,stage",
+                "number,short_description,state,stage,sys_created_on",
             },
 
             auth: this.auth,
@@ -384,51 +525,58 @@ class RequestService {
       const results =
         response.data.result || [];
 
-      if (results.length > 0) {
+      if (
+        results.length > 0
+      ) {
 
-        const existing = results[0];
-
-        logger.info(
-          "Duplicate request found",
-          {
-            number: existing.number,
-            state: existing.state,
-          }
-        );
+        const existing =
+          results[0];
 
         return {
           isDuplicate: true,
+
           existingRequest: {
-            number: existing.number,
-            state: existing.state,
-            stage: existing.stage,
-            created: existing.sys_created_on,
+
+            number:
+              existing.number,
+
+            state:
+              this.getReadableState(
+                existing.state,
+                existing.stage
+              ),
+
+            stage:
+              existing.stage,
+
+            created:
+              existing.sys_created_on,
+
             shortDescription:
               existing.short_description,
           },
         };
       }
 
-      logger.info(
-        "No duplicate found",
-        { userSysId, application }
-      );
-
       return {
         isDuplicate: false,
+
         existingRequest: null,
       };
 
     } catch (error) {
 
       logger.error(
-        "Duplicate check failed",
-        { error: error.message }
+        "Duplicate request check failed",
+        {
+          error:
+            error.message,
+        }
       );
 
-      // Fail open — allow request if check errors
       return {
         isDuplicate: false,
+
         existingRequest: null,
       };
     }
@@ -488,7 +636,10 @@ class RequestService {
 
       logger.info(
         "Request created",
-        { number: request.number }
+        {
+          number:
+            request.number,
+        }
       );
 
       return {
@@ -500,7 +651,16 @@ class RequestService {
           request.sys_id,
 
         status:
+          this.getReadableState(
+            request.state,
+            request.stage
+          ),
+
+        rawState:
           request.state,
+
+        rawStage:
+          request.stage,
 
         url:
 `${this.baseURL}/nav_to.do?uri=sc_request.do?sys_id=${request.sys_id}`,
@@ -524,7 +684,9 @@ class RequestService {
   /**
    * GET REQUEST STATUS
    */
-  async getRequestStatus(requestNumber) {
+  async getRequestStatus(
+    requestNumber
+  ) {
 
     try {
 
@@ -535,6 +697,7 @@ class RequestService {
 
           {
             params: {
+
               sysparm_query:
                 `number=${requestNumber}`,
 
@@ -549,21 +712,41 @@ class RequestService {
         response.data.result[0];
 
       if (!request) {
-        throw new Error("Request not found");
+
+        throw new Error(
+          "Request not found"
+        );
       }
 
       return {
-        number: request.number,
-        state: request.state,
-        stage: request.stage,
-        created: request.sys_created_on,
+
+        number:
+          request.number,
+
+        state:
+          this.getReadableState(
+            request.state,
+            request.stage
+          ),
+
+        rawState:
+          request.state,
+
+        rawStage:
+          request.stage,
+
+        created:
+          request.sys_created_on,
       };
 
     } catch (error) {
 
       logger.error(
-        "Failed getting request",
-        { error: error.message }
+        "Get request status failed",
+        {
+          error:
+            error.message,
+        }
       );
 
       throw error;
@@ -573,14 +756,11 @@ class RequestService {
   /**
    * GET USER REQUESTS
    */
-  async getUserRequests(userId) {
+  async getUserRequests(
+    userId
+  ) {
 
     try {
-
-      logger.info(
-        "Fetching user requests",
-        { userId }
-      );
 
       const response =
         await axios.get(
@@ -596,7 +776,7 @@ class RequestService {
               sysparm_limit: 20,
 
               sysparm_fields:
-                "number,short_description,state,sys_created_on,requested_for",
+                "number,short_description,state,stage,sys_created_on",
             },
 
             auth: this.auth,
@@ -605,17 +785,60 @@ class RequestService {
 
       return (
         response.data.result || []
-      );
+      ).map((req) => ({
+
+        number:
+          req.number,
+
+        shortDescription:
+          req.short_description,
+
+        state:
+          this.getReadableState(
+            req.state,
+            req.stage
+          ),
+
+        rawState:
+          req.state,
+
+        rawStage:
+          req.stage,
+
+        created:
+          req.sys_created_on,
+      }));
 
     } catch (error) {
 
       logger.error(
         "Failed fetching user requests",
-        { error: error.message }
+        {
+          error:
+            error.message,
+        }
       );
 
       return [];
     }
+  }
+
+  /**
+   * SEARCH KNOWLEDGE BASE
+   */
+  async searchKnowledgeBase(
+    application,
+    query
+  ) {
+
+    return {
+
+      title:
+        `${application} Access Guide`,
+
+      summary:
+        `Follow the documented access process for ${application}.`,
+    };
   }
 }
 

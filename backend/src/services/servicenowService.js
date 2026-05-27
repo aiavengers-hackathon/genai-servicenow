@@ -40,12 +40,11 @@ async function createIncident(data) {
 /**
  * CREATE ACCESS REQUEST
  *
- * Flow:
+ * Features:
  * 1. Resolve username → ServiceNow sys_id
- *    If not found → return notSnowUser: true
- * 2. Check for duplicate open request
- *    If found → return isDuplicate: true
- * 3. Create request using sys_id as requested_for
+ * 2. Duplicate request detection
+ * 3. AI/User-defined priority
+ * 4. ServiceNow request creation
  */
 async function createAccessRequest(data) {
 
@@ -56,12 +55,15 @@ async function createAccessRequest(data) {
       {
         application: data.application,
         username: data.username,
+        requestedPriority:
+          data.requestedPriority,
       }
     );
 
-    // STEP 1: Resolve ServiceNow username → sys_id
-    // The username typed by user (e.g. "sayyedr") must exist
-    // in ServiceNow sys_user table to create a valid request
+    /**
+     * STEP 1
+     * Resolve ServiceNow user
+     */
     const userSysId =
       await requestService.resolveUserSysId(
         data.username
@@ -71,10 +73,11 @@ async function createAccessRequest(data) {
 
       logger.warn(
         "User not found in ServiceNow",
-        { username: data.username }
+        {
+          username: data.username,
+        }
       );
 
-      // Clear session — user needs to start over
       if (data.userId) {
         clearSession(data.userId);
       }
@@ -93,24 +96,32 @@ async function createAccessRequest(data) {
       }
     );
 
-    // STEP 2: Check for duplicate open request
-    // Use sys_id (not username) for the ServiceNow query
+    /**
+     * STEP 2
+     * Duplicate request check
+     */
     const {
       isDuplicate,
       existingRequest,
-    } = await requestService.checkDuplicateRequest(
-      userSysId,
-      data.application
-    );
+    } =
+      await requestService.checkDuplicateRequest(
+        userSysId,
+        data.application
+      );
 
     if (isDuplicate) {
 
       logger.info(
         "Duplicate request blocked",
         {
-          username: data.username,
-          application: data.application,
-          existingRequest: existingRequest.number,
+          username:
+            data.username,
+
+          application:
+            data.application,
+
+          existingRequest:
+            existingRequest.number,
         }
       );
 
@@ -124,39 +135,148 @@ async function createAccessRequest(data) {
       };
     }
 
-    // STEP 3: No duplicate — create the request
-    // Use sys_id as requested_for so ServiceNow
-    // correctly links request to the user
+    /**
+     * STEP 3
+     * PRIORITY CALCULATION
+     */
+
+    let priority = "3";
+    let urgency = "3";
+    let impact = "3";
+
+    const requestedPriority =
+      (
+        data.requestedPriority || ""
+      )
+        .toLowerCase()
+        .trim();
+
+    
+    /**
+     * HIGH
+     */
+    if (
+      requestedPriority.includes(
+        "high"
+      )
+    ) {
+
+      priority = "2";
+      urgency = "2";
+      impact = "2";
+    }
+
+    /**
+     * LOW
+     */
+    else if (
+      requestedPriority.includes(
+        "low"
+      )
+    ) {
+
+      priority = "4";
+      urgency = "4";
+      impact = "4";
+    }
+
+    /**
+     * MEDIUM DEFAULT
+     */
+    else {
+
+      priority = "3";
+      urgency = "3";
+      impact = "3";
+    }
+
+    logger.info(
+      "Request priority mapping",
+      {
+        requestedPriority,
+        priority,
+        urgency,
+        impact,
+      }
+    );
+
+    /**
+     * STEP 4
+     * CREATE REQUEST
+     */
     const result =
       await requestService.submitRequest({
 
-        requestedFor: userSysId,
+        requestedFor:
+          userSysId,
 
         shortDescription:
-          data.shortDescription,
-
-        description:
+          data.shortDescription ||
           `Access request for ${data.application}`,
 
-        priority: "3",
+        description:
+          data.description ||
+          `Access request for ${data.application}`,
+
+        priority,
+        urgency,
+        impact,
       });
 
+    logger.info(
+      "Access request created",
+      {
+        requestNumber:
+          result.number,
+
+        priority,
+      }
+    );
+
+    /**
+     * STEP 5
+     * CLEAR SESSION
+     */
     if (data.userId) {
+
       clearSession(data.userId);
+
       logger.info(
         "Session cleared after access request",
-        { userId: data.userId }
+        {
+          userId:
+            data.userId,
+        }
       );
     }
 
-    return result;
+    /**
+     * RETURN RESPONSE
+     */
+    return {
+      ...result,
+
+      priority,
+      urgency,
+      impact,
+
+      priorityLabel:
+        priority === "1"
+          ? "Critical"
+          : priority === "2"
+          ? "High"
+          : priority === "4"
+          ? "Low"
+          : "Medium",
+    };
 
   } catch (error) {
 
     logger.error(
       "Access request failed",
       {
-        error: error.message,
+        error:
+          error.message,
       }
     );
 
