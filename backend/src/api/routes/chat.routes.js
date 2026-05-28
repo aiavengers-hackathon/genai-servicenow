@@ -17,7 +17,7 @@ const PRIORITY_LABELS = {
 };
 
 /**
- * USER PRIORITY INPUT
+ * USER PRIORITY INPUT MAP
  */
 const PRIORITY_MAP = {
   critical: "1",
@@ -27,20 +27,33 @@ const PRIORITY_MAP = {
 };
 
 /**
- * INCIDENT PRIORITY SUGGESTION
+ * INCIDENT PRIORITY ANALYSIS
  */
 function analyzePriority(text = "") {
   const msg = text.toLowerCase();
-  if (msg.includes("critical") || msg.includes("production down") || msg.includes("system down") || msg.includes("urgent")) {
-    return { severity: "CRITICAL", priority: "1", label: "Critical" };
+
+  if (
+    msg.includes("critical") ||
+    msg.includes("production down") ||
+    msg.includes("system down") ||
+    msg.includes("urgent")
+  ) {
+    return { severity: "CRITICAL", suggestedPriority: "Critical" };
   }
-  if (msg.includes("high") || msg.includes("unable to login") || msg.includes("blocked")) {
-    return { severity: "HIGH", priority: "2", label: "High" };
+
+  if (
+    msg.includes("high") ||
+    msg.includes("unable to login") ||
+    msg.includes("blocked")
+  ) {
+    return { severity: "HIGH", suggestedPriority: "High" };
   }
+
   if (msg.includes("low") || msg.includes("minor")) {
-    return { severity: "LOW", priority: "4", label: "Low" };
+    return { severity: "LOW", suggestedPriority: "Low" };
   }
-  return { severity: "MEDIUM", priority: "3", label: "Medium" };
+
+  return { severity: "MEDIUM", suggestedPriority: "Medium" };
 }
 
 /**
@@ -64,57 +77,62 @@ router.post("/message", async (req, res) => {
       return res.json({ reply: "Request cancelled successfully." });
     }
 
-    /**
-     * =====================================================
-     * ACCESS REQUEST FLOW
-     * =====================================================
-     */
-    if (session.workflow === "access_request") {
-      // STEP 1: Ask Username
-      if (session.awaitingField === "username") {
-        session.collectedData.username = text;
-        session.awaitingField = "priority";
+    // ===================== ACCESS REQUEST =====================
+    if (session.workflow === "access_request" && session.awaitingField === "username") {
+      session.collectedData.username = text;
+      session.awaitingField = "priority";
+
+      return res.json({
+        reply: `
+Please provide request priority.
+Available priorities:
+• Low
+• Medium
+• High
+• Critical
+`,
+      });
+    }
+
+    if (session.workflow === "access_request" && session.awaitingField === "priority") {
+      const priority = PRIORITY_MAP[lower];
+      if (!priority) {
         return res.json({
-          reply: `Please provide request priority.
-Available priorities: Low, Medium, High, Critical`,
+          reply: `
+Invalid priority. Please enter:
+• Low
+• Medium
+• High
+• Critical
+`,
         });
       }
 
-      // STEP 2: Ask Priority
-      if (session.awaitingField === "priority") {
-        const priority = PRIORITY_MAP[lower];
-        if (!priority) {
-          return res.json({
-            reply: `Invalid priority. Please enter: Low, Medium, High, Critical`,
-          });
-        }
-        session.collectedData.priority = priority;
-        session.awaitingField = null;
-        session.awaitingConfirmation = true;
-        return res.json({
-          reply: `
+      session.collectedData.priority = priority;
+      session.awaitingField = null;
+      session.awaitingConfirmation = true;
+
+      return res.json({
+        reply: `
 Access Request Summary
 Application: ${session.collectedData.application}
 Username: ${session.collectedData.username}
 Priority: ${PRIORITY_LABELS[priority]}
-
-Type CONFIRM to create access request.`,
-        });
-      }
+Type CONFIRM to create access request.
+`,
+      });
     }
 
-    /**
-     * =====================================================
-     * INCIDENT FLOW
-     * =====================================================
-     */
+    // ===================== INCIDENT =====================
     if (session.workflow === "incident" && session.awaitingField === "details") {
       const analysis = analyzePriority(text);
       const calculated = incidentService.calculatePriority(analysis.severity, false);
+
       session.collectedData.description = text;
       session.collectedData.priority = calculated.priority;
       session.collectedData.urgency = calculated.urgency;
       session.collectedData.impact = calculated.impact;
+
       session.awaitingField = null;
       session.awaitingConfirmation = true;
 
@@ -122,18 +140,14 @@ Type CONFIRM to create access request.`,
         reply: `
 Incident Summary
 Application: ${session.collectedData.application}
-Suggested Priority: ${analysis.label}
+Suggested Priority: ${analysis.suggestedPriority}
 Issue Details: ${text}
-
-Type CONFIRM to create incident.`,
+Type CONFIRM to create incident.
+`,
       });
     }
 
-    /**
-     * =====================================================
-     * CONFIRMATION FLOW
-     * =====================================================
-     */
+    // ===================== CONFIRMATION =====================
     if (session.awaitingConfirmation) {
       if (lower !== "confirm") {
         return res.json({ reply: "Please type CONFIRM or CANCEL." });
@@ -143,12 +157,14 @@ Type CONFIRM to create incident.`,
       if (session.workflow === "incident") {
         const incident = await createIncident({ ...session.collectedData, userId });
         clearSession(userId);
+
         return res.json({
           reply: `
 Incident created successfully.
 Incident Number: ${incident.number}
-Priority: ${PRIORITY_LABELS[incident.priority] || incident.priority}
-Status: ${incident.stateLabel}`,
+Priority: ${incident.priorityLabel}
+Status: ${incident.stateLabel}
+`,
         });
       }
 
@@ -160,31 +176,31 @@ Status: ${incident.stateLabel}`,
         if (result.notSnowUser) {
           return res.json({ reply: `User ${result.username} not found in ServiceNow.` });
         }
+
         if (result.isDuplicate) {
           return res.json({
             reply: `
 Duplicate access request already exists.
-Request Number: ${result.existingRequest.number}`,
+Request Number: ${result.existingRequest.number}
+`,
           });
         }
+
         return res.json({
           reply: `
 Access request created successfully.
 Request Number: ${result.number}
-Priority: ${PRIORITY_LABELS[result.priority] || result.priority}
-Status: ${result.status}`,
+Priority: ${PRIORITY_LABELS[result.priority]}
+Status: ${result.status}
+`,
         });
       }
     }
 
-    /**
-     * =====================================================
-     * AI PROCESSING
-     * =====================================================
-     */
+    // ===================== AI PROCESSING =====================
     const response = await processMessage(session, text);
 
-    // ACCESS REQUEST START
+    // START ACCESS REQUEST
     if (response.type === "READY_TO_CREATE_ACCESS_REQUEST") {
       session.workflow = "access_request";
       session.awaitingField = "username";
@@ -192,15 +208,17 @@ Status: ${result.status}`,
         application: response.application,
         shortDescription: `Access request for ${response.application || "Application"}`,
       };
+
       return res.json({
         reply: `
 Application validated successfully.
 Application: ${response.application}
-Please provide your username.`,
+Please provide your username.
+`,
       });
     }
 
-    // INCIDENT START
+    // START INCIDENT
     if (response.type === "READY_TO_CREATE_INCIDENT") {
       session.workflow = "incident";
       session.awaitingField = "details";
@@ -209,17 +227,17 @@ Please provide your username.`,
         application: response.incident.application,
         assignment_group: response.incident.assignmentGroup,
       };
+
       return res.json({
         reply: `
 Incident detected for: ${response.incident.application}
-Please provide complete issue details.`,
+Please provide complete issue details.
+`,
       });
     }
 
     // DEFAULT RESPONSE
-    return res.json({
-      reply: response.reply || response.message || "I could not understand your request.",
-    });
+    return res.json({ reply: response.reply || response.message || "I could not understand your request." });
   } catch (err) {
     console.error("CHAT ERROR:", err);
     return res.status(500).json({ error: err.message });
