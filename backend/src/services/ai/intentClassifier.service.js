@@ -1,199 +1,371 @@
 /**
- * INTENT CLASSIFIER SERVICE
+ * SMART INTENT CLASSIFIER
  */
 
-const logger = require("../../utils/logger");
+const logger =
+  require("../../utils/logger");
 
 class IntentClassifierService {
 
   /**
-   * CLASSIFY USER MESSAGE
+   * CHECK KEYWORDS
+   */
+  contains(text, keywords = []) {
+
+    return keywords.some(
+      (k) => text.includes(k)
+    );
+  }
+
+  /**
+   * CLASSIFY
    */
   async classify(message) {
 
     try {
 
       if (!message) {
+
         return {
           intent: "UNKNOWN",
           confidence: 0,
         };
       }
 
-      const text = String(message).toLowerCase();
+      const text =
+        String(message)
+          .toLowerCase()
+          .trim();
 
-      logger.info("Classifying intent", {
-        message: text,
-      });
-
-      /**
-       * ACCESS REQUEST
-       */
-      if (
-        text.includes("access") ||
-        text.includes("give access") ||
-        text.includes("request access") ||
-        text.includes("application access")
-      ) {
-
-        return {
-          intent: "ACCESS_REQUEST",
-          confidence: 0.95,
-          reasoning: "Detected access request keywords",
-          entities: {},
-        };
-      }
+      logger.info(
+        "Classifying intent",
+        { text }
+      );
 
       /**
-       * INCIDENT
+       * =====================================
+       * MAJOR OUTAGE
+       * =====================================
        */
+      const outageKeywords = [
+
+        "system down",
+        "production down",
+        "outage",
+        "all users impacted",
+        "multiple users",
+        "server down",
+        "site down",
+        "critical outage",
+      ];
+
       if (
-        text.includes("not working") ||
-        text.includes("issue") ||
-        text.includes("error") ||
-        text.includes("failed") ||
-        text.includes("problem") ||
-        text.includes("unable") ||
-        text.includes("down")
-      ) {
-
-        return {
-          intent: "INCIDENT",
-          confidence: 0.90,
-          reasoning: "Detected incident/problem keywords",
-          entities: {},
-        };
-      }
-
-      /**
-       * PASSWORD RESET
-       */
-      if (
-        text.includes("password") ||
-        text.includes("reset password") ||
-        text.includes("forgot password")
-      ) {
-
-        return {
-          intent: "PASSWORD_RESET",
-          confidence: 0.96,
-          reasoning: "Detected password reset request",
-          entities: {},
-        };
-      }
-
-      /**
-       * REQUEST STATUS
-       */
-      if (
-        text.includes("request status") ||
-        text.includes("track request") ||
-        text.includes("request update")
-      ) {
-
-        return {
-          intent: "REQUEST_STATUS",
-          confidence: 0.92,
-          reasoning: "Detected request status query",
-          entities: {},
-        };
-      }
-
-      /**
-       * INCIDENT STATUS
-       */
-      if (
-        text.includes("incident status") ||
-        text.includes("track incident") ||
-        text.includes("check incident")
-      ) {
-
-        return {
-          intent: "INCIDENT_STATUS",
-          confidence: 0.92,
-          reasoning: "Detected incident status query",
-          entities: {},
-        };
-      }
-
-      /**
-       * KNOWLEDGE BASE QUERY
-       */
-      if (
-        text.includes("how to") ||
-        text.includes("guide") ||
-        text.includes("help") ||
-        text.includes("steps")
-      ) {
-
-        return {
-          intent: "KB_QUERY",
-          confidence: 0.85,
-          reasoning: "Detected knowledge/help query",
-          entities: {},
-        };
-      }
-
-      /**
-       * OUTAGE
-       */
-      if (
-        text.includes("outage") ||
-        text.includes("system down") ||
-        text.includes("production down") ||
-        text.includes("multiple users")
+        this.contains(
+          text,
+          outageKeywords
+        )
       ) {
 
         return {
           intent: "OUTAGE",
-          confidence: 0.97,
-          reasoning: "Detected outage/major incident",
+          confidence: 0.99,
+          reasoning:
+            "Major outage detected",
           entities: {},
         };
       }
 
       /**
-       * SERVICE REQUEST
+       * =====================================
+       * INCIDENT
+       * =====================================
        */
+      const incidentKeywords = [
+
+        "issue",
+        "problem",
+        "error",
+        "failed",
+        "failure",
+        "unable",
+        "cannot",
+        "can't",
+        "not working",
+        "down",
+        "slow",
+        "bug",
+        "blocked",
+        "exception",
+        "access issue",
+        "unable to access",
+        "cannot access",
+        "login issue",
+        "login failed",
+        "vpn not working",
+      ];
+
       if (
-        text.includes("laptop") ||
-        text.includes("software install") ||
-        text.includes("new monitor") ||
-        text.includes("request software")
+        this.contains(
+          text,
+          incidentKeywords
+        )
       ) {
 
         return {
-          intent: "SERVICE_REQUEST",
-          confidence: 0.88,
-          reasoning: "Detected service request",
+          intent: "INCIDENT",
+          confidence: 0.95,
+          reasoning:
+            "Incident keywords detected",
           entities: {},
         };
       }
 
       /**
+       * =====================================
+       * ACCESS REQUEST
+       * =====================================
+       */
+      const accessKeywords = [
+
+        "request access",
+        "need access",
+        "provide access",
+        "grant access",
+        "application access",
+        "vpn access",
+        "shared folder access",
+      ];
+
+      if (
+        this.contains(
+          text,
+          accessKeywords
+        )
+      ) {
+
+        return {
+          intent:
+            "ACCESS_REQUEST",
+
+          confidence: 0.95,
+
+          reasoning:
+            "Access request detected",
+
+          entities: {},
+        };
+      }
+
+      /**
+       * =====================================
+       * SERVICE REQUEST
+       * =====================================
+       */
+      const serviceKeywords = [
+
+        "new laptop",
+        "laptop request",
+        "software install",
+        "install software",
+        "new monitor",
+        "mouse request",
+        "keyboard request",
+        "hardware request",
+        "service request",
+      ];
+
+      if (
+        this.contains(
+          text,
+          serviceKeywords
+        )
+      ) {
+
+        return {
+          intent:
+            "SERVICE_REQUEST",
+
+          confidence: 0.90,
+
+          reasoning:
+            "Service request detected",
+
+          entities: {},
+        };
+      }
+
+      /**
+       * =====================================
+       * PASSWORD RESET
+       * =====================================
+       */
+      const passwordKeywords = [
+
+        "password reset",
+        "forgot password",
+        "reset password",
+        "unlock account",
+      ];
+
+      if (
+        this.contains(
+          text,
+          passwordKeywords
+        )
+      ) {
+
+        return {
+          intent:
+            "PASSWORD_RESET",
+
+          confidence: 0.98,
+
+          reasoning:
+            "Password reset detected",
+
+          entities: {},
+        };
+      }
+
+      /**
+       * =====================================
+       * INCIDENT STATUS
+       * =====================================
+       */
+      const incidentStatusKeywords = [
+
+        "incident status",
+        "check incident",
+        "track incident",
+      ];
+
+      if (
+        this.contains(
+          text,
+          incidentStatusKeywords
+        )
+      ) {
+
+        return {
+          intent:
+            "INCIDENT_STATUS",
+
+          confidence: 0.95,
+
+          reasoning:
+            "Incident status query",
+
+          entities: {},
+        };
+      }
+
+      /**
+       * =====================================
+       * REQUEST STATUS
+       * =====================================
+       */
+      const requestStatusKeywords = [
+
+        "request status",
+        "track request",
+        "request update",
+      ];
+
+      if (
+        this.contains(
+          text,
+          requestStatusKeywords
+        )
+      ) {
+
+        return {
+          intent:
+            "REQUEST_STATUS",
+
+          confidence: 0.95,
+
+          reasoning:
+            "Request status query",
+
+          entities: {},
+        };
+      }
+
+      /**
+       * =====================================
+       * KB QUERY
+       * =====================================
+       */
+      const kbKeywords = [
+
+        "how to",
+        "guide",
+        "steps",
+        "documentation",
+        "help",
+      ];
+
+      if (
+        this.contains(
+          text,
+          kbKeywords
+        )
+      ) {
+
+        return {
+          intent:
+            "KB_QUERY",
+
+          confidence: 0.80,
+
+          reasoning:
+            "Knowledge query detected",
+
+          entities: {},
+        };
+      }
+
+      /**
+       * =====================================
        * UNKNOWN
+       * =====================================
        */
       return {
+
         intent: "UNKNOWN",
+
         confidence: 0.30,
-        reasoning: "No matching intent found",
+
+        reasoning:
+          "No matching intent",
+
         entities: {},
       };
 
     } catch (error) {
 
-      logger.error("Intent classification failed", {
-        error: error.message,
-      });
+      logger.error(
+        "Intent classification failed",
+        {
+          error:
+            error.message,
+        }
+      );
 
       return {
+
         intent: "UNKNOWN",
+
         confidence: 0,
-        reasoning: "Classifier exception",
+
+        reasoning:
+          "Classifier exception",
+
         entities: {},
       };
     }
   }
 }
 
-module.exports = new IntentClassifierService();
+module.exports =
+  new IntentClassifierService();

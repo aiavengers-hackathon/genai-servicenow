@@ -1,5 +1,8 @@
-const IntentClassifier = require("../services/ai/intentClassifier.service");
-const EntityExtractor = require("../services/ai/entityExtractor.service");
+const IntentClassifier =
+  require("../services/ai/intentClassifier.service");
+
+const EntityExtractor =
+  require("../services/ai/entityExtractor.service");
 
 const requestService =
   require("../services/servicenow/request.service");
@@ -16,13 +19,16 @@ class TriageEngine {
 
     try {
 
+      const text =
+        String(message || "").trim();
+
       const lower =
-        message.toLowerCase().trim();
+        text.toLowerCase();
 
       /**
-       * =========================
+       * =========================================
        * GREETING
-       * =========================
+       * =========================================
        */
       if (
         lower === "hi" ||
@@ -34,308 +40,18 @@ class TriageEngine {
           type: "GREETING",
 
           reply:
-            "Hello! I am your AI Service Desk Assistant. I can help with incidents, access requests, request tracking, password reset, and KB guidance.",
+            "Hello! I am your AI Service Desk Assistant. I can help you with incidents, access requests, password resets, request tracking, and knowledge articles.",
         };
       }
 
       /**
-       * =====================================
-       * ACCESS REQUEST → USERNAME COLLECTION
-       * =====================================
-       */
-      if (
-        session.workflow ===
-          "access_request" &&
-
-        session.awaitingField ===
-          "username"
-      ) {
-
-        const username =
-          message.trim();
-
-        logger.info(
-          "Validating username",
-          { username }
-        );
-
-        const userSysId =
-          await requestService.resolveUserSysId(
-            username
-          );
-
-        if (!userSysId) {
-
-          return {
-            type: "ERROR",
-
-            reply:
-`User "${username}" not found in ServiceNow.
-
-Please provide a valid username.`,
-          };
-        }
-
-        session.collectedData.username =
-          username;
-
-        session.collectedData.requestedFor =
-          userSysId;
-
-        session.awaitingField =
-          "priority";
-
-        return {
-          type:
-            "ACCESS_REQUEST_PRIORITY",
-
-          reply:
-`Username validated successfully.
-
-Please provide request priority.
-
-Available priorities:
-• Critical
-• High
-• Medium
-• Low`,
-        };
-      }
-
-      /**
-       * =====================================
-       * ACCESS REQUEST → PRIORITY COLLECTION
-       * =====================================
-       */
-      if (
-        session.workflow ===
-          "access_request" &&
-
-        session.awaitingField ===
-          "priority"
-      ) {
-
-        const priorityInput =
-          lower;
-
-        let priority = "3";
-        let priorityLabel = "Medium";
-
-        if (
-          priorityInput.includes(
-            "critical"
-          )
-        ) {
-
-          priority = "1";
-          priorityLabel =
-            "Critical";
-        }
-
-        else if (
-          priorityInput.includes(
-            "high"
-          )
-        ) {
-
-          priority = "2";
-          priorityLabel =
-            "High";
-        }
-
-        else if (
-          priorityInput.includes(
-            "low"
-          )
-        ) {
-
-          priority = "4";
-          priorityLabel =
-            "Low";
-        }
-
-        session.collectedData.priority =
-          priority;
-
-        session.collectedData.priorityLabel =
-          priorityLabel;
-
-        session.awaitingField =
-          null;
-
-        session.awaitingConfirmation =
-          true;
-
-        return {
-          type:
-            "READY_TO_CREATE_ACCESS_REQUEST",
-
-          reply:
-`Access Request Summary
-
-Application:
-${session.collectedData.application}
-
-Username:
-${session.collectedData.username}
-
-Priority:
-${priorityLabel}
-
-Type CONFIRM to create the request.`,
-        };
-      }
-
-      /**
-       * =====================================
-       * INCIDENT → USERNAME COLLECTION
-       * =====================================
-       */
-      if (
-        session.workflow ===
-          "incident" &&
-
-        session.awaitingField ===
-          "username"
-      ) {
-
-        const username =
-          message.trim();
-
-        session.collectedData.username =
-          username;
-
-        session.awaitingField =
-          "details";
-
-        return {
-          type:
-            "INCIDENT_DETAILS",
-
-          reply:
-            "Please provide detailed issue description including business impact.",
-        };
-      }
-
-      /**
-       * =====================================
-       * INCIDENT → DETAILS COLLECTION
-       * =====================================
-       */
-      if (
-        session.workflow ===
-          "incident" &&
-
-        session.awaitingField ===
-          "details"
-      ) {
-
-        session.collectedData.description =
-          message;
-
-        /**
-         * AI PRIORITY SUGGESTION
-         */
-        let priority = "3";
-        let priorityLabel =
-          "Medium";
-
-        if (
-          lower.includes(
-            "production down"
-          ) ||
-
-          lower.includes(
-            "critical"
-          ) ||
-
-          lower.includes(
-            "all users"
-          ) ||
-
-          lower.includes(
-            "system down"
-          )
-        ) {
-
-          priority = "1";
-          priorityLabel =
-            "Critical";
-        }
-
-        else if (
-          lower.includes(
-            "high"
-          ) ||
-
-          lower.includes(
-            "urgent"
-          )
-        ) {
-
-          priority = "2";
-          priorityLabel =
-            "High";
-        }
-
-        else if (
-          lower.includes(
-            "low"
-          ) ||
-
-          lower.includes(
-            "minor"
-          )
-        ) {
-
-          priority = "4";
-          priorityLabel =
-            "Low";
-        }
-
-        session.collectedData.priority =
-          priority;
-
-        session.collectedData.priorityLabel =
-          priorityLabel;
-
-        session.awaitingField =
-          null;
-
-        session.awaitingConfirmation =
-          true;
-
-        return {
-          type:
-            "READY_TO_CREATE_INCIDENT",
-
-          reply:
-`Incident Summary
-
-Application:
-${session.collectedData.application}
-
-Username:
-${session.collectedData.username}
-
-AI Suggested Priority:
-${priorityLabel}
-
-Issue:
-${message}
-
-Type CONFIRM to create incident.`,
-        };
-      }
-
-      /**
-       * =====================================
+       * =========================================
        * INTENT CLASSIFICATION
-       * =====================================
+       * =========================================
        */
       const classification =
         await IntentClassifier.classify(
-          message,
+          text,
           { session }
         );
 
@@ -347,21 +63,49 @@ Type CONFIRM to create incident.`,
 
           confidence:
             classification.confidence,
+
+          reasoning:
+            classification.reasoning,
         }
       );
 
       /**
+       * =========================================
        * ENTITY EXTRACTION
+       * =========================================
        */
       const entities =
         await EntityExtractor.extract(
-          message
+          text
         );
 
+      logger.info(
+        "Entities extracted",
+        entities
+      );
+
       /**
-       * =====================================
+       * =========================================
+       * APPLICATION DETECTION
+       * =========================================
+       */
+      const application =
+        entities?.applications?.[0]
+          ?.name ||
+
+        classification?.entities
+          ?.application ||
+
+        this._extractApplication(
+          text
+        ) ||
+
+        "General Application";
+
+      /**
+       * =========================================
        * REQUEST STATUS
-       * =====================================
+       * =========================================
        */
       if (
         classification.intent ===
@@ -373,28 +117,18 @@ Type CONFIRM to create incident.`,
             "REQUEST_STATUS",
 
           reply:
-            "Please provide request number like REQ0010001.",
+            "Please provide your request number to check the status.",
         };
       }
 
       /**
-       * =====================================
+       * =========================================
        * INCIDENT STATUS
-       * =====================================
+       * =========================================
        */
       if (
-
-        lower.includes(
-          "incident status"
-        ) ||
-
-        lower.includes(
-          "check incident"
-        ) ||
-
-        lower.includes(
-          "track incident"
-        )
+        classification.intent ===
+        "INCIDENT_STATUS"
       ) {
 
         return {
@@ -402,14 +136,14 @@ Type CONFIRM to create incident.`,
             "INCIDENT_STATUS",
 
           reply:
-            "Please provide incident number like INC0010001.",
+            "Please provide your incident number to check the status.",
         };
       }
 
       /**
-       * =====================================
+       * =========================================
        * PASSWORD RESET
-       * =====================================
+       * =========================================
        */
       if (
         classification.intent ===
@@ -421,46 +155,78 @@ Type CONFIRM to create incident.`,
             "PASSWORD_RESET",
 
           reply:
-            "You can reset your password using self-service password portal. If MFA is locked contact IAM support.",
+            "You can reset your password using the self-service password reset portal. If your account is locked, please contact IAM Support.",
         };
       }
 
       /**
-       * =====================================
-       * ACCESS REQUEST
-       * =====================================
+       * =========================================
+       * KNOWLEDGE BASE QUERY
+       * =========================================
        */
       if (
-
         classification.intent ===
-          "ACCESS_REQUEST" ||
-
-        lower.includes(
-          "access"
-        ) ||
-
-        lower.includes(
-          "access request"
-        )
+        "KB_QUERY"
       ) {
 
-        const application =
-          entities.applications?.[0]
-            ?.name ||
+        try {
 
-          classification.entities
-            ?.application ||
+          const kbArticle =
+            await requestService.searchKnowledgeBase(
+              application,
+              text
+            );
 
-          message
-            .replace(
-              /need access on/gi,
-              ""
-            )
-            .replace(
-              /access request/gi,
-              ""
-            )
-            .trim();
+          if (kbArticle) {
+
+            return {
+              type:
+                "KB_RESPONSE",
+
+              kbArticle,
+
+              reply:
+`I found a knowledge article that may help.
+
+Title:
+${kbArticle.title}
+
+Summary:
+${kbArticle.summary}
+
+Please try these steps before creating a ticket.`,
+            };
+          }
+
+        } catch (error) {
+
+          logger.error(
+            "KB lookup failed",
+            {
+              error:
+                error.message,
+            }
+          );
+        }
+
+        return {
+          type:
+            "KB_RESPONSE",
+
+          reply:
+            "I could not find a matching knowledge article. Would you like me to create an incident instead?",
+        };
+      }
+
+      /**
+       * =========================================
+       * ACCESS REQUEST
+       * =========================================
+       */
+      if (
+        classification.intent ===
+        "ACCESS_REQUEST"
+      ) {
 
         logger.info(
           "Access request detected",
@@ -468,122 +234,168 @@ Type CONFIRM to create incident.`,
         );
 
         /**
-         * HACKATHON MODE
-         * DO NOT BLOCK APPLICATION
+         * VALIDATE APPLICATION
          */
-        session.workflow =
-          "access_request";
+        const validation =
+          await requestService.validateApplication(
+            application
+          );
 
-        session.awaitingField =
-          "username";
+        logger.info(
+          "Application validation result",
+          validation
+        );
 
-        session.collectedData = {
+        /**
+         * HACKATHON MODE
+         * DO NOT BLOCK REQUEST CREATION
+         */
+        return {
+          type:
+            "READY_TO_CREATE_ACCESS_REQUEST",
 
           application,
 
-          shortDescription:
-            `Access request for ${application}`,
+          request: {
 
-          description:
-            `User requesting access for ${application}`,
+            application,
 
-          assignmentGroup:
-            "IAM Support",
-        };
+            assignmentGroup:
+              "IAM Support",
 
-        return {
-          type:
-            "ACCESS_REQUEST",
+            configurationItem:
+              application,
+
+            catalogItem:
+              "Application Access",
+          },
 
           reply:
-`Application validated successfully for ${application}.
+`Access request detected for ${application}.
 
-Please provide your username.`,
+I will help you create an access request.`,
         };
       }
 
       /**
-       * =====================================
-       * INCIDENT
-       * =====================================
+       * =========================================
+       * OUTAGE / MAJOR INCIDENT
+       * =========================================
        */
       if (
-
         classification.intent ===
-          "INCIDENT" ||
-
-        lower.includes(
-          "issue"
-        ) ||
-
-        lower.includes(
-          "error"
-        ) ||
-
-        lower.includes(
-          "not working"
-        )
+        "OUTAGE"
       ) {
-
-        const application =
-          entities.applications?.[0]
-            ?.name ||
-
-          classification.entities
-            ?.application ||
-
-          "General Application";
-
-        session.workflow =
-          "incident";
-
-        session.awaitingField =
-          "username";
-
-        session.collectedData = {
-
-          application,
-
-          short_description:
-            message.substring(
-              0,
-              120
-            ),
-
-          assignment_group:
-            this._resolveAssignmentGroup(
-              application
-            ),
-        };
 
         return {
           type:
-            "INCIDENT",
+            "MAJOR_INCIDENT",
+
+          incident: {
+
+            title:
+              `Major outage reported for ${application}`,
+
+            description:
+              text,
+
+            application,
+
+            assignmentGroup:
+              "Major Incident Team",
+
+            severity:
+              "CRITICAL",
+          },
+
+          reply:
+`A major outage has been detected for ${application}.
+
+A high-priority incident can be created immediately.`,
+        };
+      }
+
+      /**
+       * =========================================
+       * INCIDENT
+       * =========================================
+       */
+      if (
+        classification.intent ===
+        "INCIDENT"
+      ) {
+
+        logger.info(
+          "Incident detected",
+          { application }
+        );
+
+        return {
+          type:
+            "READY_TO_CREATE_INCIDENT",
+
+          incident: {
+
+            title:
+              text.substring(
+                0,
+                120
+              ),
+
+            description:
+              text,
+
+            application,
+
+            assignmentGroup:
+              this._resolveAssignmentGroup(
+                application
+              ),
+          },
 
           reply:
 `Incident detected for ${application}.
 
-Please provide your username.`,
+Please provide complete issue details including exact error message, screenshots, or business impact.`,
         };
       }
 
       /**
-       * =====================================
+       * =========================================
+       * SERVICE REQUEST
+       * =========================================
+       */
+      if (
+        classification.intent ===
+        "SERVICE_REQUEST"
+      ) {
+
+        return {
+          type:
+            "SERVICE_REQUEST",
+
+          reply:
+            "I detected a service request. Please provide the required software, hardware, or service details.",
+        };
+      }
+
+      /**
+       * =========================================
        * FALLBACK
-       * =====================================
+       * =========================================
        */
       return {
         type:
           "UNKNOWN",
 
         reply:
-          "Please provide more details about your issue or request.",
+          "I could not fully understand your request. Please provide more details.",
       };
 
     } catch (error) {
 
       logger.error(
-        "Triage Engine failed",
+        "Triage engine failed",
         {
           error:
             error.message,
@@ -598,13 +410,59 @@ Please provide your username.`,
           "ERROR",
 
         reply:
-          "Something went wrong while processing your request.",
+          "Something went wrong while processing your request. Please try again.",
       };
     }
   }
 
   /**
-   * ASSIGNMENT GROUP
+   * =========================================
+   * APPLICATION EXTRACTION
+   * =========================================
+   */
+  _extractApplication(text = "") {
+
+    const lower =
+      text.toLowerCase();
+
+    /**
+     * COMMON ENTERPRISE APPS
+     */
+    const applications = [
+
+      "sap",
+      "servicenow",
+      "vpn",
+      "outlook",
+      "teams",
+      "jira",
+      "confluence",
+      "workday",
+      "salesforce",
+      "oracle",
+      "aws",
+      "azure",
+      "baamr",
+      "active directory",
+    ];
+
+    for (const app of applications) {
+
+      if (
+        lower.includes(app)
+      ) {
+
+        return app;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * =========================================
+   * ASSIGNMENT GROUP ROUTING
+   * =========================================
    */
   _resolveAssignmentGroup(
     application = ""
@@ -616,25 +474,39 @@ Please provide your username.`,
     if (
       app.includes("sap")
     ) {
+
       return "SAP Support";
     }
 
     if (
-      app.includes("vpn")
+      app.includes("vpn") ||
+      app.includes("cisco")
     ) {
+
       return "Network Support";
+    }
+
+    if (
+      app.includes("azure") ||
+      app.includes("aws")
+    ) {
+
+      return "Cloud Operations";
     }
 
     if (
       app.includes("servicenow")
     ) {
+
       return "ServiceNow Support";
     }
 
     if (
-      app.includes("azure")
+      app.includes("active directory") ||
+      app === "ad"
     ) {
-      return "Cloud Operations";
+
+      return "IAM Support";
     }
 
     return "Service Desk";

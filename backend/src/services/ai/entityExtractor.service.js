@@ -1,83 +1,114 @@
 /**
- * ENTITY EXTRACTOR SERVICE
+ * ENTITY EXTRACTOR
  */
 
-const logger = require("../../utils/logger");
-
 class EntityExtractorService {
-  /**
-   * EXTRACT ENTITIES
-   */
+
   async extract(message) {
-    try {
-      const text = message.toLowerCase();
 
-      const entities = {
-        applications: [],
-        urgency: null,
-      };
+    const text =
+      String(message || "");
 
-      /**
-       * APPLICATION DETECTION
-       */
-      const knownApps = [
-        "sap",
-        "servicenow",
-        "vpn",
-        "oracle",
-        "workday",
-        "azure",
-        "aws",
-        "active directory",
-        "outlook",
-        "teams",
-        "jira",
-        "baamr",
-        "cdrsrs",
-        "gimas"
+    const lower =
+      text.toLowerCase();
+
+    /**
+     * APPLICATION DETECTION
+     */
+    const applications = [];
+
+    const knownApps = [
+
+      "sap",
+      "vpn",
+      "servicenow",
+      "outlook",
+      "azure",
+      "aws",
+      "jira",
+      "confluence",
+      "baamr",
+      "oracle",
+      "workday",
+      "salesforce",
+      "teams",
+      "citrix",
+    ];
+
+    knownApps.forEach((app) => {
+
+      if (
+        lower.includes(app)
+      ) {
+
+        applications.push({
+          name: app.toUpperCase(),
+        });
+      }
+    });
+
+    /**
+     * FALLBACK APP DETECTION
+     */
+    if (
+      applications.length === 0
+    ) {
+
+      const patterns = [
+
+        /access to ([a-zA-Z0-9-_]+)/i,
+        /issue with ([a-zA-Z0-9-_]+)/i,
+        /problem with ([a-zA-Z0-9-_]+)/i,
+        /unable to access ([a-zA-Z0-9-_]+)/i,
+        /cannot access ([a-zA-Z0-9-_]+)/i,
+        /([a-zA-Z0-9-_]+) not working/i,
       ];
 
-      knownApps.forEach((app) => {
-        if (text.includes(app)) {
-          entities.applications.push({
-            name: app,
+      for (const pattern of patterns) {
+
+        const match =
+          text.match(pattern);
+
+        if (match?.[1]) {
+
+          applications.push({
+            name: match[1],
           });
+
+          break;
         }
-      });
-
-      /**
-       * URGENCY DETECTION
-       */
-      if (
-        text.includes("critical") ||
-        text.includes("urgent") ||
-        text.includes("production down")
-      ) {
-        entities.urgency = "HIGH";
-      } else if (
-        text.includes("medium")
-      ) {
-        entities.urgency = "MEDIUM";
-      } else {
-        entities.urgency = "LOW";
       }
-
-      logger.info("Entities extracted", entities);
-
-      return entities;
-
-    } catch (error) {
-
-      logger.error("Entity extraction failed", {
-        error: error.message,
-      });
-
-      return {
-        applications: [],
-        urgency: "LOW",
-      };
     }
+
+    /**
+     * URGENCY
+     */
+    let urgency =
+      "MEDIUM";
+
+    if (
+      lower.includes("critical") ||
+      lower.includes("urgent")
+    ) {
+
+      urgency = "HIGH";
+    }
+
+    if (
+      lower.includes("low")
+    ) {
+
+      urgency = "LOW";
+    }
+
+    return {
+
+      applications,
+
+      urgency,
+    };
   }
 }
 
-module.exports = new EntityExtractorService();
+module.exports =
+  new EntityExtractorService();
