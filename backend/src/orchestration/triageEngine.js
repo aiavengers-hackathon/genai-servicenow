@@ -1,7 +1,11 @@
 const IntentClassifier = require("../services/ai/intentClassifier.service");
 const EntityExtractor = require("../services/ai/entityExtractor.service");
-const requestService = require("../services/servicenow/request.service");
-const logger = require("../utils/logger");
+
+const requestService =
+  require("../services/servicenow/request.service");
+
+const logger =
+  require("../utils/logger");
 
 class TriageEngine {
 
@@ -13,27 +17,321 @@ class TriageEngine {
     try {
 
       const lower =
-        message.toLowerCase();
+        message.toLowerCase().trim();
 
       /**
+       * =========================
        * GREETING
+       * =========================
        */
       if (
-        lower.includes("hello") ||
-        lower.includes("hi") ||
-        lower.includes("hey")
+        lower === "hi" ||
+        lower === "hello" ||
+        lower === "hey"
       ) {
 
         return {
           type: "GREETING",
 
           reply:
-            "Hello! I'm your AI Service Desk assistant. I can help with incidents, access requests, password resets, request tracking, and KB guidance.",
+            "Hello! I am your AI Service Desk Assistant. I can help with incidents, access requests, request tracking, password reset, and KB guidance.",
         };
       }
 
       /**
+       * =====================================
+       * ACCESS REQUEST → USERNAME COLLECTION
+       * =====================================
+       */
+      if (
+        session.workflow ===
+          "access_request" &&
+
+        session.awaitingField ===
+          "username"
+      ) {
+
+        const username =
+          message.trim();
+
+        logger.info(
+          "Validating username",
+          { username }
+        );
+
+        const userSysId =
+          await requestService.resolveUserSysId(
+            username
+          );
+
+        if (!userSysId) {
+
+          return {
+            type: "ERROR",
+
+            reply:
+`User "${username}" not found in ServiceNow.
+
+Please provide a valid username.`,
+          };
+        }
+
+        session.collectedData.username =
+          username;
+
+        session.collectedData.requestedFor =
+          userSysId;
+
+        session.awaitingField =
+          "priority";
+
+        return {
+          type:
+            "ACCESS_REQUEST_PRIORITY",
+
+          reply:
+`Username validated successfully.
+
+Please provide request priority.
+
+Available priorities:
+• Critical
+• High
+• Medium
+• Low`,
+        };
+      }
+
+      /**
+       * =====================================
+       * ACCESS REQUEST → PRIORITY COLLECTION
+       * =====================================
+       */
+      if (
+        session.workflow ===
+          "access_request" &&
+
+        session.awaitingField ===
+          "priority"
+      ) {
+
+        const priorityInput =
+          lower;
+
+        let priority = "3";
+        let priorityLabel = "Medium";
+
+        if (
+          priorityInput.includes(
+            "critical"
+          )
+        ) {
+
+          priority = "1";
+          priorityLabel =
+            "Critical";
+        }
+
+        else if (
+          priorityInput.includes(
+            "high"
+          )
+        ) {
+
+          priority = "2";
+          priorityLabel =
+            "High";
+        }
+
+        else if (
+          priorityInput.includes(
+            "low"
+          )
+        ) {
+
+          priority = "4";
+          priorityLabel =
+            "Low";
+        }
+
+        session.collectedData.priority =
+          priority;
+
+        session.collectedData.priorityLabel =
+          priorityLabel;
+
+        session.awaitingField =
+          null;
+
+        session.awaitingConfirmation =
+          true;
+
+        return {
+          type:
+            "READY_TO_CREATE_ACCESS_REQUEST",
+
+          reply:
+`Access Request Summary
+
+Application:
+${session.collectedData.application}
+
+Username:
+${session.collectedData.username}
+
+Priority:
+${priorityLabel}
+
+Type CONFIRM to create the request.`,
+        };
+      }
+
+      /**
+       * =====================================
+       * INCIDENT → USERNAME COLLECTION
+       * =====================================
+       */
+      if (
+        session.workflow ===
+          "incident" &&
+
+        session.awaitingField ===
+          "username"
+      ) {
+
+        const username =
+          message.trim();
+
+        session.collectedData.username =
+          username;
+
+        session.awaitingField =
+          "details";
+
+        return {
+          type:
+            "INCIDENT_DETAILS",
+
+          reply:
+            "Please provide detailed issue description including business impact.",
+        };
+      }
+
+      /**
+       * =====================================
+       * INCIDENT → DETAILS COLLECTION
+       * =====================================
+       */
+      if (
+        session.workflow ===
+          "incident" &&
+
+        session.awaitingField ===
+          "details"
+      ) {
+
+        session.collectedData.description =
+          message;
+
+        /**
+         * AI PRIORITY SUGGESTION
+         */
+        let priority = "3";
+        let priorityLabel =
+          "Medium";
+
+        if (
+          lower.includes(
+            "production down"
+          ) ||
+
+          lower.includes(
+            "critical"
+          ) ||
+
+          lower.includes(
+            "all users"
+          ) ||
+
+          lower.includes(
+            "system down"
+          )
+        ) {
+
+          priority = "1";
+          priorityLabel =
+            "Critical";
+        }
+
+        else if (
+          lower.includes(
+            "high"
+          ) ||
+
+          lower.includes(
+            "urgent"
+          )
+        ) {
+
+          priority = "2";
+          priorityLabel =
+            "High";
+        }
+
+        else if (
+          lower.includes(
+            "low"
+          ) ||
+
+          lower.includes(
+            "minor"
+          )
+        ) {
+
+          priority = "4";
+          priorityLabel =
+            "Low";
+        }
+
+        session.collectedData.priority =
+          priority;
+
+        session.collectedData.priorityLabel =
+          priorityLabel;
+
+        session.awaitingField =
+          null;
+
+        session.awaitingConfirmation =
+          true;
+
+        return {
+          type:
+            "READY_TO_CREATE_INCIDENT",
+
+          reply:
+`Incident Summary
+
+Application:
+${session.collectedData.application}
+
+Username:
+${session.collectedData.username}
+
+AI Suggested Priority:
+${priorityLabel}
+
+Issue:
+${message}
+
+Type CONFIRM to create incident.`,
+        };
+      }
+
+      /**
+       * =====================================
        * INTENT CLASSIFICATION
+       * =====================================
        */
       const classification =
         await IntentClassifier.classify(
@@ -49,9 +347,6 @@ class TriageEngine {
 
           confidence:
             classification.confidence,
-
-          reasoning:
-            classification.reasoning,
         }
       );
 
@@ -64,7 +359,9 @@ class TriageEngine {
         );
 
       /**
+       * =====================================
        * REQUEST STATUS
+       * =====================================
        */
       if (
         classification.intent ===
@@ -72,33 +369,47 @@ class TriageEngine {
       ) {
 
         return {
-          type: "REQUEST_STATUS",
+          type:
+            "REQUEST_STATUS",
 
           reply:
-            "Sure, I can help check your request status. Please provide your request number.",
+            "Please provide request number like REQ0010001.",
         };
       }
 
       /**
+       * =====================================
        * INCIDENT STATUS
+       * =====================================
        */
       if (
-        /incident\s+status/i.test(lower) ||
-        /status\s+of\s+incident/i.test(lower) ||
-        /check\s+incident/i.test(lower) ||
-        /track\s+incident/i.test(lower)
+
+        lower.includes(
+          "incident status"
+        ) ||
+
+        lower.includes(
+          "check incident"
+        ) ||
+
+        lower.includes(
+          "track incident"
+        )
       ) {
 
         return {
-          type: "INCIDENT_STATUS",
+          type:
+            "INCIDENT_STATUS",
 
           reply:
-            "Sure, I can help check your incident status. Please provide the incident number.",
+            "Please provide incident number like INC0010001.",
         };
       }
 
       /**
+       * =====================================
        * PASSWORD RESET
+       * =====================================
        */
       if (
         classification.intent ===
@@ -106,88 +417,50 @@ class TriageEngine {
       ) {
 
         return {
-          type: "PASSWORD_RESET",
+          type:
+            "PASSWORD_RESET",
 
           reply:
-            "You can reset your password using the self-service password portal. If MFA is locked, please contact IAM support.",
+            "You can reset your password using self-service password portal. If MFA is locked contact IAM support.",
         };
       }
 
       /**
-       * KNOWLEDGE BASE QUERY
-       */
-      if (
-        classification.intent ===
-        "KB_QUERY"
-      ) {
-
-        const application =
-          entities.applications?.[0]
-            ?.name ||
-          "Application";
-
-        try {
-
-          const kbArticle =
-            await requestService.searchKnowledgeBase(
-              application,
-              message
-            );
-
-          if (kbArticle) {
-
-            return {
-              type: "KB_RESPONSE",
-
-              kbArticle,
-
-              reply: `I found a knowledge article that may help.
-
-Title: ${kbArticle.title}
-
-Summary:
-${kbArticle.summary}
-
-Please try the documented steps before creating a ticket.`,
-            };
-          }
-
-        } catch (error) {
-
-          logger.error(
-            "KB lookup failed",
-            {
-              error:
-                error.message,
-            }
-          );
-        }
-
-        return {
-          type: "KB_RESPONSE",
-
-          reply:
-            "I could not find a matching KB article. Would you like me to create an incident instead?",
-        };
-      }
-
-      /**
+       * =====================================
        * ACCESS REQUEST
+       * =====================================
        */
       if (
+
         classification.intent ===
-        "ACCESS_REQUEST"
+          "ACCESS_REQUEST" ||
+
+        lower.includes(
+          "access"
+        ) ||
+
+        lower.includes(
+          "access request"
+        )
       ) {
 
         const application =
           entities.applications?.[0]
             ?.name ||
+
           classification.entities
             ?.application ||
-          extractApplicationName(
-            message
-          ) ||
-          "UNKNOWN_APPLICATION";
+
+          message
+            .replace(
+              /need access on/gi,
+              ""
+            )
+            .replace(
+              /access request/gi,
+              ""
+            )
+            .trim();
 
         logger.info(
           "Access request detected",
@@ -195,194 +468,122 @@ Please try the documented steps before creating a ticket.`,
         );
 
         /**
-         * OPTIONAL VALIDATION
+         * HACKATHON MODE
+         * DO NOT BLOCK APPLICATION
          */
-        let validatedApplication =
-          application;
+        session.workflow =
+          "access_request";
 
-        try {
+        session.awaitingField =
+          "username";
 
-          const appExists =
-            await requestService.validateApplication(
-              application
-            );
+        session.collectedData = {
 
-          if (!appExists) {
+          application,
 
-            logger.warn(
-              "Application not found in ServiceNow",
-              { application }
-            );
+          shortDescription:
+            `Access request for ${application}`,
 
-            /**
-             * Continue anyway
-             * for demo/hackathon
-             */
-            validatedApplication =
-              application;
-          }
+          description:
+            `User requesting access for ${application}`,
 
-        } catch (error) {
-
-          logger.error(
-            "Application validation failed",
-            {
-              error:
-                error.message,
-            }
-          );
-        }
-
-        return {
-          type: "ACCESS_REQUEST",
-
-          accessRequest: {
-
-            application:
-              validatedApplication,
-
-            assignmentGroup:
-              "IAM Support",
-
-            configurationItem:
-              validatedApplication,
-
-            catalogItem:
-              "Application Access",
-          },
-
-          reply: `
-I detected an access request for ${validatedApplication}.
-
-Please provide your username.
-`,
+          assignmentGroup:
+            "IAM Support",
         };
-      }
-
-      /**
-       * MAJOR OUTAGE
-       */
-      if (
-        classification.intent ===
-        "OUTAGE"
-      ) {
-
-        const application =
-          entities.applications?.[0]
-            ?.name ||
-          "Enterprise Service";
-
-        return {
-          type: "MAJOR_INCIDENT",
-
-          incident: {
-
-            title:
-              `Major outage reported for ${application}`,
-
-            description:
-              message,
-
-            application,
-
-            assignmentGroup:
-              "Major Incident Team",
-
-            severity:
-              "CRITICAL",
-          },
-
-          reply: `
-This appears to be a major outage impacting multiple users.
-
-I will create a high-priority incident for ${application}.
-`,
-        };
-      }
-
-      /**
-       * INCIDENT
-       */
-      if (
-        classification.intent ===
-        "INCIDENT"
-      ) {
-
-        const application =
-          entities.applications?.[0]
-            ?.name ||
-          classification.entities
-            ?.application ||
-          "General Application";
-
-        const urgency =
-          entities.urgency ||
-          "MEDIUM";
 
         return {
           type:
-            "READY_TO_CREATE_INCIDENT",
-
-          incident: {
-
-            title:
-              message.substring(
-                0,
-                120
-              ),
-
-            description:
-              message,
-
-            application,
-
-            assignmentGroup:
-              this._resolveAssignmentGroup(
-                application
-              ),
-
-            urgency,
-          },
-
-          reply: `
-I detected an incident related to ${application}.
-
-Please provide additional details such as screenshots, exact errors, or business impact.
-`,
-        };
-      }
-
-      /**
-       * SERVICE REQUEST
-       */
-      if (
-        classification.intent ===
-        "SERVICE_REQUEST"
-      ) {
-
-        return {
-          type:
-            "SERVICE_REQUEST",
+            "ACCESS_REQUEST",
 
           reply:
-            "I detected a service request. Please provide the required software, hardware, or service details.",
+`Application validated successfully for ${application}.
+
+Please provide your username.`,
         };
       }
 
       /**
+       * =====================================
+       * INCIDENT
+       * =====================================
+       */
+      if (
+
+        classification.intent ===
+          "INCIDENT" ||
+
+        lower.includes(
+          "issue"
+        ) ||
+
+        lower.includes(
+          "error"
+        ) ||
+
+        lower.includes(
+          "not working"
+        )
+      ) {
+
+        const application =
+          entities.applications?.[0]
+            ?.name ||
+
+          classification.entities
+            ?.application ||
+
+          "General Application";
+
+        session.workflow =
+          "incident";
+
+        session.awaitingField =
+          "username";
+
+        session.collectedData = {
+
+          application,
+
+          short_description:
+            message.substring(
+              0,
+              120
+            ),
+
+          assignment_group:
+            this._resolveAssignmentGroup(
+              application
+            ),
+        };
+
+        return {
+          type:
+            "INCIDENT",
+
+          reply:
+`Incident detected for ${application}.
+
+Please provide your username.`,
+        };
+      }
+
+      /**
+       * =====================================
        * FALLBACK
+       * =====================================
        */
       return {
-        type: "UNKNOWN",
+        type:
+          "UNKNOWN",
 
         reply:
-          "I could not fully understand your request. Please provide more details.",
+          "Please provide more details about your issue or request.",
       };
 
     } catch (error) {
 
       logger.error(
-        "Triage engine failed",
+        "Triage Engine failed",
         {
           error:
             error.message,
@@ -393,16 +594,17 @@ Please provide additional details such as screenshots, exact errors, or business
       );
 
       return {
-        type: "ERROR",
+        type:
+          "ERROR",
 
         reply:
-          "Something went wrong while processing your request. Please try again.",
+          "Something went wrong while processing your request.",
       };
     }
   }
 
   /**
-   * ASSIGNMENT GROUP ROUTING
+   * ASSIGNMENT GROUP
    */
   _resolveAssignmentGroup(
     application = ""
@@ -418,17 +620,9 @@ Please provide additional details such as screenshots, exact errors, or business
     }
 
     if (
-      app.includes("vpn") ||
-      app.includes("cisco")
+      app.includes("vpn")
     ) {
       return "Network Support";
-    }
-
-    if (
-      app.includes("azure") ||
-      app.includes("aws")
-    ) {
-      return "Cloud Operations";
     }
 
     if (
@@ -438,48 +632,13 @@ Please provide additional details such as screenshots, exact errors, or business
     }
 
     if (
-      app.includes(
-        "active directory"
-      ) ||
-      app === "ad"
+      app.includes("azure")
     ) {
-      return "IAM Support";
+      return "Cloud Operations";
     }
 
     return "Service Desk";
   }
-}
-
-/**
- * EXTRACT APPLICATION NAME
- */
-function extractApplicationName(
-  text = ""
-) {
-
-  const lower =
-    text.toLowerCase();
-
-  const patterns = [
-
-    /access\s+(?:to|for|on)\s+([a-zA-Z0-9_-]+)/i,
-
-    /need\s+access\s+(?:to|for|on)?\s*([a-zA-Z0-9_-]+)/i,
-
-    /request\s+access\s+(?:to|for|on)?\s*([a-zA-Z0-9_-]+)/i,
-  ];
-
-  for (const pattern of patterns) {
-
-    const match =
-      lower.match(pattern);
-
-    if (match?.[1]) {
-      return match[1];
-    }
-  }
-
-  return null;
 }
 
 module.exports =
