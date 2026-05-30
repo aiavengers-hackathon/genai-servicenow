@@ -7,9 +7,6 @@ const logger =
 
 class IntentClassifierService {
 
-  /**
-   * CHECK KEYWORDS
-   */
   contains(text, keywords = []) {
 
     return keywords.some(
@@ -17,9 +14,6 @@ class IntentClassifierService {
     );
   }
 
-  /**
-   * CLASSIFY
-   */
   async classify(message) {
 
     try {
@@ -43,12 +37,136 @@ class IntentClassifierService {
       );
 
       /**
-       * =====================================
-       * MAJOR OUTAGE
-       * =====================================
+       * INCIDENT STATUS
+       */
+      if (
+        text.includes("incident status") ||
+        text.includes("status of incident") ||
+        text.includes("check incident") ||
+        text.match(/inc\d+/i)
+      ) {
+
+        return {
+          intent: "INCIDENT_STATUS",
+          confidence: 0.98,
+          reasoning:
+            "Incident status request",
+          entities: {},
+        };
+      }
+
+      /**
+       * REQUEST STATUS
+       */
+      if (
+        text.includes("request status") ||
+        text.includes("status of request") ||
+        text.includes("track request") ||
+        text.match(/req\d+/i)
+      ) {
+
+        return {
+          intent: "REQUEST_STATUS",
+          confidence: 0.98,
+          reasoning:
+            "Request status request",
+          entities: {},
+        };
+      }
+
+      /**
+       * MY REQUESTS
+       */
+      if (
+        text.includes("my requests") ||
+        text.includes("show requests") ||
+        text.includes("list requests") ||
+        text.includes("open requests")
+      ) {
+
+        return {
+          intent: "MY_REQUESTS",
+          confidence: 0.95,
+          reasoning:
+            "User requests list",
+          entities: {},
+        };
+      }
+
+      /**
+       * MY INCIDENTS
+       */
+      if (
+        text.includes("my incidents") ||
+        text.includes("show incidents") ||
+        text.includes("list incidents") ||
+        text.includes("open incidents")
+      ) {
+
+        return {
+          intent: "MY_INCIDENTS",
+          confidence: 0.95,
+          reasoning:
+            "User incidents list",
+          entities: {},
+        };
+      }
+
+      /**
+       * COMMENT INCIDENT
+       */
+      if (
+        text.includes("add comment") ||
+        text.includes("work note") ||
+        text.includes("update incident")
+      ) {
+
+        return {
+          intent: "COMMENT_INCIDENT",
+          confidence: 0.95,
+          reasoning:
+            "Incident update",
+          entities: {},
+        };
+      }
+
+      /**
+       * RESOLVE INCIDENT
+       */
+      if (
+        text.includes("resolve incident") ||
+        text.includes("mark resolved")
+      ) {
+
+        return {
+          intent: "RESOLVE_INCIDENT",
+          confidence: 0.95,
+          reasoning:
+            "Resolve incident",
+          entities: {},
+        };
+      }
+
+      /**
+       * CLOSE INCIDENT
+       */
+      if (
+        text.includes("close incident")
+      ) {
+
+        return {
+          intent: "CLOSE_INCIDENT",
+          confidence: 0.95,
+          reasoning:
+            "Close incident",
+          entities: {},
+        };
+      }
+
+      /**
+       * OUTAGE
        */
       const outageKeywords = [
-
         "system down",
         "production down",
         "outage",
@@ -76,57 +194,9 @@ class IntentClassifierService {
       }
 
       /**
-       * =====================================
-       * INCIDENT
-       * =====================================
-       */
-      const incidentKeywords = [
-
-        "issue",
-        "problem",
-        "error",
-        "failed",
-        "failure",
-        "unable",
-        "cannot",
-        "can't",
-        "not working",
-        "down",
-        "slow",
-        "bug",
-        "blocked",
-        "exception",
-        "access issue",
-        "unable to access",
-        "cannot access",
-        "login issue",
-        "login failed",
-        "vpn not working",
-      ];
-
-      if (
-        this.contains(
-          text,
-          incidentKeywords
-        )
-      ) {
-
-        return {
-          intent: "INCIDENT",
-          confidence: 0.95,
-          reasoning:
-            "Incident keywords detected",
-          entities: {},
-        };
-      }
-
-      /**
-       * =====================================
        * ACCESS REQUEST
-       * =====================================
        */
       const accessKeywords = [
-
         "request access",
         "need access",
         "provide access",
@@ -146,199 +216,89 @@ class IntentClassifierService {
         return {
           intent:
             "ACCESS_REQUEST",
-
           confidence: 0.95,
-
           reasoning:
-            "Access request detected",
-
+            "Access request",
           entities: {},
         };
       }
 
       /**
-       * =====================================
-       * SERVICE REQUEST
-       * =====================================
+       * INCIDENT
        */
-      const serviceKeywords = [
-
-        "new laptop",
-        "laptop request",
-        "software install",
-        "install software",
-        "new monitor",
-        "mouse request",
-        "keyboard request",
-        "hardware request",
-        "service request",
+      const incidentKeywords = [
+        "issue",
+        "problem",
+        "error",
+        "failed",
+        "failure",
+        "unable",
+        "cannot",
+        "can't",
+        "not working",
+        "blocked",
+        "bug",
       ];
 
       if (
         this.contains(
           text,
-          serviceKeywords
+          incidentKeywords
         )
       ) {
 
         return {
-          intent:
-            "SERVICE_REQUEST",
-
-          confidence: 0.90,
-
+          intent: "INCIDENT",
+          confidence: 0.95,
           reasoning:
-            "Service request detected",
-
+            "Incident detected",
           entities: {},
         };
       }
 
       /**
-       * =====================================
        * PASSWORD RESET
-       * =====================================
        */
-      const passwordKeywords = [
-
-        "password reset",
-        "forgot password",
-        "reset password",
-        "unlock account",
-      ];
-
       if (
-        this.contains(
-          text,
-          passwordKeywords
-        )
+        text.includes("password reset") ||
+        text.includes("forgot password") ||
+        text.includes("unlock account")
       ) {
 
         return {
           intent:
             "PASSWORD_RESET",
-
-          confidence: 0.98,
-
-          reasoning:
-            "Password reset detected",
-
-          entities: {},
-        };
-      }
-
-      /**
-       * =====================================
-       * INCIDENT STATUS
-       * =====================================
-       */
-      const incidentStatusKeywords = [
-
-        "incident status",
-        "check incident",
-        "track incident",
-      ];
-
-      if (
-        this.contains(
-          text,
-          incidentStatusKeywords
-        )
-      ) {
-
-        return {
-          intent:
-            "INCIDENT_STATUS",
-
           confidence: 0.95,
-
           reasoning:
-            "Incident status query",
-
+            "Password reset",
           entities: {},
         };
       }
 
       /**
-       * =====================================
-       * REQUEST STATUS
-       * =====================================
-       */
-      const requestStatusKeywords = [
-
-        "request status",
-        "track request",
-        "request update",
-      ];
-
-      if (
-        this.contains(
-          text,
-          requestStatusKeywords
-        )
-      ) {
-
-        return {
-          intent:
-            "REQUEST_STATUS",
-
-          confidence: 0.95,
-
-          reasoning:
-            "Request status query",
-
-          entities: {},
-        };
-      }
-
-      /**
-       * =====================================
        * KB QUERY
-       * =====================================
        */
-      const kbKeywords = [
-
-        "how to",
-        "guide",
-        "steps",
-        "documentation",
-        "help",
-      ];
-
       if (
-        this.contains(
-          text,
-          kbKeywords
-        )
+        text.includes("how to") ||
+        text.includes("guide") ||
+        text.includes("steps") ||
+        text.includes("documentation")
       ) {
 
         return {
-          intent:
-            "KB_QUERY",
-
-          confidence: 0.80,
-
+          intent: "KB_QUERY",
+          confidence: 0.85,
           reasoning:
-            "Knowledge query detected",
-
+            "Knowledge query",
           entities: {},
         };
       }
 
-      /**
-       * =====================================
-       * UNKNOWN
-       * =====================================
-       */
       return {
-
         intent: "UNKNOWN",
-
         confidence: 0.30,
-
         reasoning:
           "No matching intent",
-
         entities: {},
       };
 
@@ -353,15 +313,8 @@ class IntentClassifierService {
       );
 
       return {
-
         intent: "UNKNOWN",
-
         confidence: 0,
-
-        reasoning:
-          "Classifier exception",
-
-        entities: {},
       };
     }
   }

@@ -10,6 +10,12 @@ const requestService =
 const logger =
   require("../utils/logger");
 
+  const incidentNumber =
+  entities.incidentNumber;
+
+const requestNumber =
+  entities.requestNumber;
+
 class TriageEngine {
 
   /**
@@ -31,9 +37,14 @@ class TriageEngine {
        * =========================================
        */
       if (
-        lower === "hi" ||
-        lower === "hello" ||
-        lower === "hey"
+        [
+          "hi",
+          "hello",
+          "hey",
+          "good morning",
+          "good afternoon",
+          "good evening",
+        ].includes(lower)
       ) {
 
         return {
@@ -90,6 +101,8 @@ class TriageEngine {
        * =========================================
        */
       const application =
+        entities?.application ||
+
         entities?.applications?.[0]
           ?.name ||
 
@@ -98,9 +111,7 @@ class TriageEngine {
 
         this._extractApplication(
           text
-        ) ||
-
-        "General Application";
+        );
 
       /**
        * =========================================
@@ -108,8 +119,58 @@ class TriageEngine {
        * =========================================
        */
       if (
-        classification.intent ===
-        "REQUEST_STATUS"
+if (
+ classification.intent ===
+ "REQUEST_STATUS"
+) {
+
+  if (requestNumber) {
+
+    const status =
+      await requestService.getRequestByNumber(
+        requestNumber
+      );
+
+    if (!status) {
+
+      return {
+        reply:
+          `Request ${requestNumber} not found.`,
+      };
+    }
+
+    return {
+
+      type:
+        "REQUEST_STATUS_RESULT",
+
+      reply:
+`
+Request Status
+
+Request:
+${status.number}
+
+State:
+${status.state}
+
+Priority:
+${status.priority}
+
+Created:
+${status.created}
+`,
+    };
+  }
+
+  return {
+    type:
+      "REQUEST_STATUS",
+
+    reply:
+      "Please provide Request Number.",
+  };
+}
       ) {
 
         return {
@@ -127,8 +188,54 @@ class TriageEngine {
        * =========================================
        */
       if (
-        classification.intent ===
-        "INCIDENT_STATUS"
+    if (
+ classification.intent ===
+ "INCIDENT_STATUS"
+) {
+
+  if (incidentNumber) {
+
+    const incident =
+      await incidentService.getIncident(
+        incidentNumber
+      );
+
+    return {
+
+      type:
+        "INCIDENT_STATUS_RESULT",
+
+      reply:
+`
+Incident Status
+
+Incident:
+${incident.number}
+
+State:
+${incident.stateLabel}
+
+Priority:
+${incident.priorityLabel}
+
+Assignment Group:
+${incident.assignmentGroup}
+
+Created:
+${incident.created}
+`,
+    };
+  }
+
+  return {
+
+    type:
+      "INCIDENT_STATUS",
+
+    reply:
+      "Please provide Incident Number.",
+  };
+}
       ) {
 
         return {
@@ -171,21 +278,23 @@ class TriageEngine {
 
         try {
 
-          const kbArticle =
-            await requestService.searchKnowledgeBase(
-              application,
-              text
-            );
+          if (application) {
 
-          if (kbArticle) {
+            const kbArticle =
+              await requestService.searchKnowledgeBase(
+                application,
+                text
+              );
 
-            return {
-              type:
-                "KB_RESPONSE",
+            if (kbArticle) {
 
-              kbArticle,
+              return {
+                type:
+                  "KB_RESPONSE",
 
-              reply:
+                kbArticle,
+
+                reply:
 `I found a knowledge article that may help.
 
 Title:
@@ -195,7 +304,8 @@ Summary:
 ${kbArticle.summary}
 
 Please try these steps before creating a ticket.`,
-            };
+              };
+            }
           }
 
         } catch (error) {
@@ -234,22 +344,55 @@ Please try these steps before creating a ticket.`,
         );
 
         /**
-         * VALIDATE APPLICATION
+         * APPLICATION NOT PROVIDED
          */
-        const validation =
-          await requestService.validateApplication(
-            application
-          );
+        if (!application) {
 
-        logger.info(
-          "Application validation result",
-          validation
-        );
+          return {
+            type:
+              "ASK_APPLICATION",
+
+            workflow:
+              "access_request",
+
+            reply:
+`Please provide the application name for which you need access.
+
+Examples:
+• I need access for DDAS
+• SAP access required
+• Need VPN access`,
+          };
+        }
 
         /**
-         * HACKATHON MODE
-         * DO NOT BLOCK REQUEST CREATION
+         * VALIDATE APPLICATION
          */
+        let validation = null;
+
+        try {
+
+          validation =
+            await requestService.validateApplication(
+              application
+            );
+
+          logger.info(
+            "Application validation result",
+            validation
+          );
+
+        } catch (error) {
+
+          logger.warn(
+            "Application validation failed",
+            {
+              error:
+                error.message,
+            }
+          );
+        }
+
         return {
           type:
             "READY_TO_CREATE_ACCESS_REQUEST",
@@ -271,9 +414,12 @@ Please try these steps before creating a ticket.`,
           },
 
           reply:
-`Access request detected for ${application}.
+`Application validated successfully.
 
-I will help you create an access request.`,
+Application:
+${application}
+
+Please provide your username / ISID.`,
         };
       }
 
@@ -294,12 +440,13 @@ I will help you create an access request.`,
           incident: {
 
             title:
-              `Major outage reported for ${application}`,
+              `Major outage reported for ${application || "Application"}`,
 
             description:
               text,
 
-            application,
+            application:
+              application || "Unknown",
 
             assignmentGroup:
               "Major Incident Team",
@@ -309,7 +456,7 @@ I will help you create an access request.`,
           },
 
           reply:
-`A major outage has been detected for ${application}.
+`A major outage has been detected for ${application || "the application"}.
 
 A high-priority incident can be created immediately.`,
         };
@@ -329,6 +476,28 @@ A high-priority incident can be created immediately.`,
           "Incident detected",
           { application }
         );
+
+        /**
+         * INCIDENT WITHOUT APP
+         */
+        if (!application) {
+
+          return {
+            type:
+              "ASK_APPLICATION_FOR_INCIDENT",
+
+            workflow:
+              "incident",
+
+            reply:
+`Please provide the application name affected by the issue.
+
+Examples:
+• BAAMR not working
+• SAP login issue
+• VPN connection failed`,
+          };
+        }
 
         return {
           type:
@@ -425,9 +594,6 @@ Please provide complete issue details including exact error message, screenshots
     const lower =
       text.toLowerCase();
 
-    /**
-     * COMMON ENTERPRISE APPS
-     */
     const applications = [
 
       "sap",
@@ -443,6 +609,7 @@ Please provide complete issue details including exact error message, screenshots
       "aws",
       "azure",
       "baamr",
+      "ddas",
       "active directory",
     ];
 
@@ -452,7 +619,7 @@ Please provide complete issue details including exact error message, screenshots
         lower.includes(app)
       ) {
 
-        return app;
+        return app.toUpperCase();
       }
     }
 
@@ -507,6 +674,20 @@ Please provide complete issue details including exact error message, screenshots
     ) {
 
       return "IAM Support";
+    }
+
+    if (
+      app.includes("ddas")
+    ) {
+
+      return "DDAS Support";
+    }
+
+    if (
+      app.includes("baamr")
+    ) {
+
+      return "BAAMR Support";
     }
 
     return "Service Desk";

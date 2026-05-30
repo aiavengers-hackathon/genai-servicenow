@@ -102,11 +102,23 @@ class EntityExtractorService {
     }
 
     return {
+const incidentMatch =
+  text.match(/INC\d+/i);
 
-      applications,
+const requestMatch =
+  text.match(/REQ\d+/i);
 
-      urgency,
-    };
+return {
+  applications,
+  urgency,
+
+  incidentNumber:
+    incidentMatch?.[0],
+
+  requestNumber:
+    requestMatch?.[0],
+}
+    }
   }
 }
 

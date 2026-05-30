@@ -1045,6 +1045,51 @@ class RequestService {
     query
   ) {
 
+async getRequestByNumber(
+  requestNumber
+) {
+
+  const response =
+    await axios.get(
+      `${this.baseURL}${this.requestEndpoint}`,
+      {
+        params: {
+          sysparm_query:
+            `number=${requestNumber}`,
+          sysparm_limit: 1,
+        },
+        auth: this.auth,
+      }
+    );
+
+  const req =
+    response.data.result?.[0];
+
+  if (!req) {
+    return null;
+  }
+
+  return {
+    number:
+      req.number,
+
+    state:
+      this.getReadableState(
+        req.state,
+        req.stage
+      ),
+
+    priority:
+      this.getReadablePriority(
+        req.priority
+      ),
+
+    created:
+      req.sys_created_on,
+  };
+}
+
+
     return {
 
       title:
