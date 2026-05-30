@@ -19,6 +19,14 @@ const {
 const incidentService =
   require("../../services/servicenow/incident.service");
 
+// Enterprise-grade utilities
+const logger = require("../../utils/logger");
+const ValidationService = require("../../utils/validation");
+const PIIProtection = require("../../utils/piiProtection");
+const AuditLogger = require("../../utils/auditLogger");
+const metricsCollector = require("../../utils/metricsCollector");
+const DuplicateDetectionService = require("../../services/duplicateDetection.service");
+
 /**
  * PRIORITY LABELS
  */
@@ -116,6 +124,8 @@ router.post(
   "/message",
   async (req, res) => {
 
+    const startTime = Date.now();
+
     try {
 
       const {
@@ -126,22 +136,32 @@ router.post(
       /**
        * VALIDATION
        */
-      if (
-        !message ||
-        !userId
-      ) {
-
+      if (!message || !userId) {
+        logger.warn("Missing required fields", { message: !!message, userId: !!userId });
         return res.status(400).json({
-          error:
-            "message and userId required",
+          success: false,
+          error: "message and userId required",
         });
       }
 
-      const text =
-        String(message).trim();
+      // Validate message
+      const msgValidation = ValidationService.validateMessage(message);
+      if (!msgValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          error: msgValidation.error,
+        });
+      }
 
-      const lower =
-        text.toLowerCase();
+      // Sanitize input
+      const text = ValidationService.sanitizeSearchQuery(String(message).trim());
+      const lower = text.toLowerCase();
+
+      // Log with PII protection
+      PIIProtection.safeLog("Chat message received", { userId, messageLength: text.length });
+
+      // Record metric
+      metricsCollector.recordChatMessage();
 
       /**
        * SESSION
@@ -401,16 +421,38 @@ Type CONFIRM to create incident.
           session.workflow === "incident"
         ) {
 
-          const incident =
-            await createIncident({
-              ...session.collectedData,
-              userId,
+          try {
+            // Check for duplicates
+            const duplicateCheck = await DuplicateDetectionService.findDuplicates({
+              short_description: session.collectedData.description || session.collectedData.short_description,
+              cmdb_ci: session.collectedData.application,
             });
 
-          clearSession(userId);
+            if (duplicateCheck.isDuplicate && duplicateCheck.type === "EXACT_MATCH") {
+              metricsCollector.recordDuplicateDetected();
+              return res.json({
+                reply: `Duplicate incident detected!\n\n${duplicateCheck.incidents.map(inc => 
+                  `Incident ${inc.number}: ${inc.description}`
+                ).join('\n')}\n\n${duplicateCheck.recommendation}`,
+              });
+            }
 
-          return res.json({
-            reply:
+            const incident =
+              await createIncident({
+                ...session.collectedData,
+                userId,
+              });
+
+            // Audit log
+            await AuditLogger.logIncidentCreation(userId, session.collectedData, incident);
+            const duration = Date.now() - startTime;
+            metricsCollector.recordIncidentCreated(duration);
+
+            clearSession(userId);
+
+            return res.json({
+              success: true,
+              reply:
 `
 Incident created successfully.
 
@@ -422,8 +464,21 @@ ${incident.priorityLabel || PRIORITY_LABELS[incident.priority]}
 
 Status:
 ${incident.stateLabel}
+
+Ticket Link:
+${process.env.SN_INSTANCE}/nav_to.do?uri=incident.do?sys_id=${incident.sys_id}
 `,
-          });
+            });
+          } catch (error) {
+            await AuditLogger.logIncidentCreationFailure(userId, session.collectedData, error);
+            metricsCollector.recordIncidentCreationFailed();
+            logger.error("Incident creation failed", { error: error.message });
+
+            return res.json({
+              success: false,
+              reply: `Failed to create incident: ${error.message}`,
+            });
+          }
         }
 
         /**
@@ -433,52 +488,59 @@ ${incident.stateLabel}
           session.workflow === "access_request"
         ) {
 
-          const result =
-            await createAccessRequest({
-              ...session.collectedData,
-              userId,
-            });
+          try {
+            const result =
+              await createAccessRequest({
+                ...session.collectedData,
+                userId,
+              });
 
-          clearSession(userId);
+            clearSession(userId);
 
-          /**
-           * USER NOT FOUND
-           */
-          if (
-            result.notSnowUser
-          ) {
+            /**
+             * USER NOT FOUND
+             */
+            if (
+              result.notSnowUser
+            ) {
 
-            return res.json({
-              reply:
+              return res.json({
+                reply:
 `
 User ${result.username} not found in ServiceNow.
 `,
-            });
-          }
+              });
+            }
 
-          /**
-           * DUPLICATE REQUEST
-           */
-          if (
-            result.isDuplicate
-          ) {
+            /**
+             * DUPLICATE REQUEST
+             */
+            if (
+              result.isDuplicate
+            ) {
 
-            return res.json({
-              reply:
+              metricsCollector.recordDuplicateDetected();
+              return res.json({
+                reply:
 `
 Duplicate access request already exists.
 
 Request Number:
 ${result.existingRequest.number}
 `,
-            });
-          }
+              });
+            }
 
-          /**
-           * SUCCESS
-           */
-          return res.json({
-            reply:
+            // Audit log
+            await AuditLogger.logRequestCreation(userId, session.collectedData, result);
+            metricsCollector.recordRequestCreated(Date.now() - startTime);
+
+            /**
+             * SUCCESS
+             */
+            return res.json({
+              success: true,
+              reply:
 `
 Access request created successfully.
 
@@ -491,7 +553,17 @@ ${PRIORITY_LABELS[result.priority] || result.priority}
 Status:
 ${result.status}
 `,
-          });
+            });
+          } catch (error) {
+            metricsCollector.recordRequestCreationFailed();
+            await AuditLogger.logAPIError('/chat/message', error, userId);
+            logger.error("Access request creation failed", { error: error.message });
+
+            return res.json({
+              success: false,
+              reply: `Failed to create access request: ${error.message}`,
+            });
+          }
         }
       }
 
@@ -655,13 +727,32 @@ Please provide complete issue details.
         err
       );
 
+      logger.error('Chat message processing failed', { 
+        error: err.message,
+        stack: err.stack,
+        userId: req.body?.userId 
+      });
+
+      await AuditLogger.logAPIError('/chat/message', err, req.body?.userId);
+
       return res.status(500).json({
+        success: false,
         error:
-          err.message,
+          err.message || "An error occurred processing your request",
       });
     }
   }
 );
+
+/**
+ * GET METRICS ENDPOINT
+ */
+router.get("/metrics", (req, res) => {
+  return res.json({
+    success: true,
+    metrics: metricsCollector.getMetrics(),
+  });
+});
 
 module.exports =
   router;

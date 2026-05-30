@@ -7,14 +7,11 @@ const EntityExtractor =
 const requestService =
   require("../services/servicenow/request.service");
 
+const incidentService =
+  require("../services/servicenow/incident.service");
+
 const logger =
   require("../utils/logger");
-
-  const incidentNumber =
-  entities.incidentNumber;
-
-const requestNumber =
-  entities.requestNumber;
 
 class TriageEngine {
 
@@ -95,6 +92,9 @@ class TriageEngine {
         entities
       );
 
+      const incidentNumber = entities?.incidentNumber;
+      const requestNumber = entities?.requestNumber;
+
       /**
        * =========================================
        * APPLICATION DETECTION
@@ -114,14 +114,13 @@ class TriageEngine {
         );
 
       /**
-       * =========================================
-       * REQUEST STATUS
-       * =========================================
-       */
-      if (
+ * =========================================
+ * REQUEST STATUS
+ * =========================================
+ */
 if (
- classification.intent ===
- "REQUEST_STATUS"
+  classification.intent ===
+  "REQUEST_STATUS"
 ) {
 
   if (requestNumber) {
@@ -134,6 +133,9 @@ if (
     if (!status) {
 
       return {
+        type:
+          "REQUEST_STATUS_RESULT",
+
         reply:
           `Request ${requestNumber} not found.`,
       };
@@ -145,8 +147,7 @@ if (
         "REQUEST_STATUS_RESULT",
 
       reply:
-`
-Request Status
+`Request Status
 
 Request:
 ${status.number}
@@ -168,29 +169,18 @@ ${status.created}
       "REQUEST_STATUS",
 
     reply:
-      "Please provide Request Number.",
+      "Please provide your request number to check the status.",
   };
 }
-      ) {
-
-        return {
-          type:
-            "REQUEST_STATUS",
-
-          reply:
-            "Please provide your request number to check the status.",
-        };
-      }
 
       /**
-       * =========================================
-       * INCIDENT STATUS
-       * =========================================
-       */
-      if (
-    if (
- classification.intent ===
- "INCIDENT_STATUS"
+ * =========================================
+ * INCIDENT STATUS
+ * =========================================
+ */
+if (
+  classification.intent ===
+  "INCIDENT_STATUS"
 ) {
 
   if (incidentNumber) {
@@ -200,26 +190,36 @@ ${status.created}
         incidentNumber
       );
 
+    if (!incident) {
+
+      return {
+        type:
+          "INCIDENT_STATUS_RESULT",
+
+        reply:
+          `Incident ${incidentNumber} not found.`,
+      };
+    }
+
     return {
 
       type:
         "INCIDENT_STATUS_RESULT",
 
       reply:
-`
-Incident Status
+`Incident Status
 
 Incident:
 ${incident.number}
 
 State:
-${incident.stateLabel}
+${incident.stateLabel || incident.state}
 
 Priority:
-${incident.priorityLabel}
+${incident.priorityLabel || incident.priority}
 
 Assignment Group:
-${incident.assignmentGroup}
+${incident.assignmentGroup || "N/A"}
 
 Created:
 ${incident.created}
@@ -233,19 +233,9 @@ ${incident.created}
       "INCIDENT_STATUS",
 
     reply:
-      "Please provide Incident Number.",
+      "Please provide your incident number to check the status.",
   };
 }
-      ) {
-
-        return {
-          type:
-            "INCIDENT_STATUS",
-
-          reply:
-            "Please provide your incident number to check the status.",
-        };
-      }
 
       /**
        * =========================================

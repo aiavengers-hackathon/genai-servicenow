@@ -101,8 +101,7 @@ class EntityExtractorService {
       urgency = "LOW";
     }
 
-    return {
-const incidentMatch =
+    const incidentMatch =
   text.match(/INC\d+/i);
 
 const requestMatch =
@@ -113,14 +112,14 @@ return {
   urgency,
 
   incidentNumber:
-    incidentMatch?.[0],
+    incidentMatch?.[0] || null,
 
   requestNumber:
-    requestMatch?.[0],
-}
+    requestMatch?.[0] || null,
+};
     }
   }
-}
+
 
 module.exports =
   new EntityExtractorService();

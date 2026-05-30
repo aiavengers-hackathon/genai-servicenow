@@ -1038,13 +1038,25 @@ class RequestService {
   }
 
   /**
-   * SEARCH KNOWLEDGE BASE
-   */
-  async searchKnowledgeBase(
-    application,
-    query
-  ) {
+ * SEARCH KNOWLEDGE BASE
+ */
+async searchKnowledgeBase(
+  application,
+  query
+) {
 
+  return {
+    title:
+      `${application} Access Guide`,
+
+    summary:
+      `Follow the documented access process for ${application}.`,
+  };
+}
+
+/**
+ * GET REQUEST BY NUMBER
+ */
 async getRequestByNumber(
   requestNumber
 ) {
@@ -1089,16 +1101,6 @@ async getRequestByNumber(
   };
 }
 
-
-    return {
-
-      title:
-        `${application} Access Guide`,
-
-      summary:
-        `Follow the documented access process for ${application}.`,
-    };
-  }
 }
 
 module.exports =

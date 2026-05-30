@@ -3,9 +3,17 @@
  * Main Express server for AI ServiceNow Agent Backend
  */
 
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
+const helmet = require("helmet");
+const bodyParser = require("body-parser");
+const logger = require("./src/utils/logger");
+const rateLimiter = require("./src/middleware/rateLimiter");
+const requestLogger = require("./src/middleware/requestLogger");
+const errorHandler = require("./src/middleware/errorHandler");
+const metricsCollector = require("./src/utils/metricsCollector");
 
 // Import routes
 const chatRoutes = require("./src/api/routes/chat.routes");
@@ -16,11 +24,21 @@ const catalogRoutes = require("./src/api/routes/catalogRoutes");
 
 // Initialize Express app
 const app = express();
+const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(helmet());
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || "*",
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    credentials: true,
+  })
+);
+app.use(bodyParser.json({ limit: "10mb" }));
+app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
+app.use(requestLogger);
+app.use(rateLimiter);
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -37,12 +55,17 @@ app.get("/health", (req, res) => {
   });
 });
 
+/**
+ * Metrics endpoint
+ */
+app.get("/api/metrics", (req, res) => {
+  return res.json({
+    success: true,
+    metrics: metricsCollector.getMetrics(),
+  });
+});
+
 // API Routes
-console.log("chatRoutes:", typeof chatRoutes);
-console.log("incidentRoutes:", typeof incidentRoutes);
-console.log("requestRoutes:", typeof requestRoutes);
-console.log("kbRoutes:", typeof kbRoutes);
-console.log("catalogRoutes:", typeof catalogRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/incidents", incidentRoutes);
 app.use("/api/requests", requestRoutes);
@@ -65,58 +88,40 @@ app.get("/api", (req, res) => {
   });
 });
 
-// 404 handler
+/**
+ * 404 handler
+ */
 app.use((req, res) => {
-  res.status(404).json({
+  return res.status(404).json({
     success: false,
     error: "Endpoint not found",
     path: req.path,
   });
 });
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error("Error:", err);
-  res.status(err.status || 500).json({
-    success: false,
-    error: err.message || "Internal server error",
-  });
-});
+// Error handler (must be last)
+app.use(errorHandler);
 
 // Start server
-const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`
-╔════════════════════════════════════════╗
-║   AI ServiceNow Agent Backend Server   ║
-╚════════════════════════════════════════╝
-
-✓ Server running on http://localhost:${PORT}
-✓ Environment: ${process.env.NODE_ENV || "development"}
-✓ Azure OpenAI: ${process.env.AZURE_OPENAI_ENDPOINT ? "✓ Connected" : "✗ Not configured"}
-✓ ServiceNow: ${process.env.SN_INSTANCE ? "✓ Connected" : "✗ Not configured"}
-
-API Endpoints:
-  GET  /health                   - Health check
-  GET  /api                      - API info
-  POST /api/chat/message         - Send chat message
-  GET  /api/chat/history         - Get conversation history
-  GET  /api/kb/search            - Search knowledge base
-  POST /api/incidents/create     - Create incident
-  POST /api/requests/create      - Create service request
-  GET  /api/catalog/search       - Search catalog
-
-Listening for requests...
-  `);
+  logger.info(`🚀 GenAI ServiceNow Server running on port ${PORT}`, {
+    nodeEnv: process.env.NODE_ENV,
+    snInstance: process.env.SN_INSTANCE,
+  });
+  console.log(`✅ Server is running on http://localhost:${PORT}`);
+  console.log(`📊 Health check: http://localhost:${PORT}/health`);
+  console.log(`📈 Metrics: http://localhost:${PORT}/api/metrics`);
 });
 
 // Graceful shutdown
 process.on("SIGTERM", () => {
-  console.log("SIGTERM received. Shutting down gracefully...");
+  logger.info("SIGTERM received, shutting down gracefully");
   process.exit(0);
 });
 
 process.on("SIGINT", () => {
-  console.log("\nSIGINT received. Shutting down gracefully...");
+  logger.info("SIGINT received, shutting down gracefully");
   process.exit(0);
 });
+
+module.exports = app;
