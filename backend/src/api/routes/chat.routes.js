@@ -15,7 +15,8 @@ const {
   getSession,
   clearSession,
 } = require("../../memory/sessionStore");
-
+const requestService =
+  require("../../services/servicenow/request.service");
 const incidentService =
   require("../../services/servicenow/incident.service");
 
@@ -168,6 +169,12 @@ router.post(
        */
       const session =
         getSession(userId);
+
+      const incidentRegex =
+  /^INC\d+$/i;
+
+const requestRegex =
+  /^REQ\d+$/i;
 
       /**
        * CANCEL FLOW
@@ -567,6 +574,164 @@ ${result.status}
         }
       }
 
+      // STATUS INPUT HANDLER
+if (session.awaitingStatusInput) {
+  const input = text.trim().toUpperCase();
+
+  // Incident number pattern
+  const incidentRegex = /^INC\d+$/;
+  // Request number pattern
+  const requestRegex = /^REQ\d+$/;
+
+  try {
+    // INCIDENT NUMBER
+    if (
+  session.statusType === "INCIDENT" &&
+  incidentRegex.test(input)
+) {
+      const incident = await incidentService.getIncident(input);
+      clearSession(userId);
+
+      return res.json({
+        reply: `
+Incident Status
+
+Number: ${incident.number}
+State: ${incident.stateLabel}
+Priority: ${incident.priorityLabel}
+Assignment Group: ${incident.assignmentGroup || "N/A"}
+Created: ${incident.created}
+        `,
+      });
+    }
+
+    // REQUEST NUMBER
+    if (
+  session.statusType === "REQUEST" &&
+  requestRegex.test(input)
+) {
+      const request = await requestService.getRequestStatus(input);
+      clearSession(userId);
+
+      return res.json({
+        reply: `
+Request Status
+
+Number: ${request.number}
+State: ${request.state}
+Priority: ${request.priority}
+Created: ${request.created}
+        `,
+      });
+    }
+
+  /**
+ * INCIDENT STATUS BY ISID
+ */
+if (session.statusType === "INCIDENT") {
+
+  const incidents =
+    await incidentService.getUserIncidentsByUsername(input);
+
+  clearSession(userId);
+
+  if (!incidents || incidents.length === 0) {
+
+    return res.json({
+      reply:
+        `No incidents found for ISID ${input}`,
+    });
+  }
+
+  let reply =
+    `Incidents for ${input}\n\n`;
+
+  incidents.forEach((incident) => {
+
+    reply +=
+      `${incident.number} - ${incident.stateLabel || incident.state}\n`;
+
+  });
+
+  return res.json({ reply });
+}
+
+/**
+ * REQUEST STATUS BY ISID
+ */
+if (session.statusType === "REQUEST") {
+
+  const requests =
+    await requestService.getUserRequests(input);
+
+  clearSession(userId);
+
+  if (!requests || requests.length === 0) {
+
+    return res.json({
+      reply:
+        `No requests found for ISID ${input}`,
+    });
+  }
+
+  let reply =
+    `Requests for ${input}\n\n`;
+
+  requests.forEach((request) => {
+
+    reply +=
+      `${request.number} - ${request.state}\n`;
+
+  });
+
+  return res.json({ reply });
+}
+
+/**
+ * GENERIC STATUS QUERY
+ */
+const requests =
+  await requestService.getUserRequests(input);
+
+const incidents =
+  await incidentService.getUserIncidentsByUsername(input);
+
+clearSession(userId);
+
+let reply =
+  `Status Summary for ${input}\n\n`;
+
+if (requests.length) {
+
+  reply += "Requests:\n";
+
+  requests.forEach((r) => {
+
+    reply +=
+      `${r.number} - ${r.state}\n`;
+
+  });
+}
+
+if (incidents.length) {
+
+  reply += "\nIncidents:\n";
+
+  incidents.forEach((i) => {
+
+    reply +=
+      `${i.number} - ${i.stateLabel || i.state}\n`;
+
+  });
+}
+
+return res.json({ reply });
+  } catch (err) {
+    console.error("Status lookup failed", err);
+    clearSession(userId);
+    return res.json({ reply: "Failed to retrieve status. Please try again later." });
+  }
+}
       /**
        * =====================================================
        * AI PROCESSING
@@ -613,7 +778,62 @@ ${result.status}
             response.reply,
         });
       }
+      /**
+ * =========================================
+ * REQUEST STATUS
+ * =========================================
+ */
+if (
+  response.type ===
+  "REQUEST_STATUS"
+) {
 
+  session.awaitingStatusInput = true;
+  session.statusType = "REQUEST";
+
+  return res.json({
+    reply:
+      response.reply,
+  });
+}
+
+/**
+ * =========================================
+ * INCIDENT STATUS
+ * =========================================
+ */
+if (
+  response.type ===
+  "INCIDENT_STATUS"
+) {
+
+  session.awaitingStatusInput = true;
+  session.statusType = "INCIDENT";
+
+  return res.json({
+    reply:
+      response.reply,
+  });
+}
+
+/**
+ * =========================================
+ * GENERIC STATUS QUERY
+ * =========================================
+ */
+if (
+  response.type ===
+  "STATUS_QUERY"
+) {
+
+  session.awaitingStatusInput = true;
+  session.statusType = "ANY";
+
+  return res.json({
+    reply:
+      response.reply,
+  });
+}
       /**
        * ACCESS REQUEST START
        */

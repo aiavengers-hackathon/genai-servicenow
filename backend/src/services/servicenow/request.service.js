@@ -1100,7 +1100,42 @@ async getRequestByNumber(
       req.sys_created_on,
   };
 }
+async getUserByUsername(username) {
 
+  try {
+
+    const response =
+      await axios.get(
+        `${this.baseURL}/api/now/table/sys_user`,
+        {
+          params: {
+            sysparm_query:
+              `user_name=${username}`,
+            sysparm_limit: 1
+          },
+          auth: this.auth
+        }
+      );
+
+    const users =
+      response.data.result || [];
+
+    return users.length
+      ? users[0]
+      : null;
+
+  } catch (error) {
+
+    logger.error(
+      "User lookup failed",
+      {
+        error: error.message
+      }
+    );
+
+    return null;
+  }
+}
 }
 
 module.exports =

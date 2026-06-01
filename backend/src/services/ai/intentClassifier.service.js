@@ -36,44 +36,57 @@ class IntentClassifierService {
         { text }
       );
 
-      /**
+            /**
        * INCIDENT STATUS
        */
-      if (
-        text.includes("incident status") ||
-        text.includes("status of incident") ||
-        text.includes("check incident") ||
-        text.match(/inc\d+/i)
-      ) {
+if (
+  text.includes("status") &&
+  text.includes("incident")
+) {
 
-        return {
-          intent: "INCIDENT_STATUS",
-          confidence: 0.98,
-          reasoning:
-            "Incident status request",
-          entities: {},
-        };
-      }
-
+  return {
+    intent: "INCIDENT_STATUS",
+    confidence: 0.99,
+    reasoning:
+      "Incident status query",
+    entities: {}
+  };
+}
       /**
        * REQUEST STATUS
        */
-      if (
-        text.includes("request status") ||
-        text.includes("status of request") ||
-        text.includes("track request") ||
-        text.match(/req\d+/i)
-      ) {
+ if (
+  text.includes("status") &&
+  (
+    text.includes("request") ||
+    text.includes("access")
+  )
+) {
 
-        return {
-          intent: "REQUEST_STATUS",
-          confidence: 0.98,
-          reasoning:
-            "Request status request",
-          entities: {},
-        };
-      }
+  return {
+    intent: "REQUEST_STATUS",
+    confidence: 0.99,
+    reasoning:
+      "Request status query",
+    entities: {}
+  };
+}
 
+ /**
+       * GENERIC STATUS
+       */
+if (
+  text.includes("status")
+) {
+
+  return {
+    intent: "STATUS_QUERY",
+    confidence: 0.95,
+    reasoning:
+      "Generic status query",
+    entities: {}
+  };
+}
       /**
        * MY REQUESTS
        */

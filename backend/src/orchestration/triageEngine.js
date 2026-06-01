@@ -113,7 +113,7 @@ class TriageEngine {
           text
         );
 
-      /**
+/**
  * =========================================
  * REQUEST STATUS
  * =========================================
@@ -123,57 +123,23 @@ if (
   "REQUEST_STATUS"
 ) {
 
-  if (requestNumber) {
-
-    const status =
-      await requestService.getRequestByNumber(
-        requestNumber
-      );
-
-    if (!status) {
-
-      return {
-        type:
-          "REQUEST_STATUS_RESULT",
-
-        reply:
-          `Request ${requestNumber} not found.`,
-      };
-    }
-
-    return {
-
-      type:
-        "REQUEST_STATUS_RESULT",
-
-      reply:
-`Request Status
-
-Request:
-${status.number}
-
-State:
-${status.state}
-
-Priority:
-${status.priority}
-
-Created:
-${status.created}
-`,
-    };
-  }
-
   return {
-    type:
-      "REQUEST_STATUS",
+    type: "REQUEST_STATUS",
 
     reply:
-      "Please provide your request number to check the status.",
+`I'd be happy to help.
+
+Please provide either:
+
+• Request Number (REQxxxxxxx)
+
+OR
+
+• Your ISID`
   };
 }
 
-      /**
+/**
  * =========================================
  * INCIDENT STATUS
  * =========================================
@@ -183,57 +149,47 @@ if (
   "INCIDENT_STATUS"
 ) {
 
-  if (incidentNumber) {
-
-    const incident =
-      await incidentService.getIncident(
-        incidentNumber
-      );
-
-    if (!incident) {
-
-      return {
-        type:
-          "INCIDENT_STATUS_RESULT",
-
-        reply:
-          `Incident ${incidentNumber} not found.`,
-      };
-    }
-
-    return {
-
-      type:
-        "INCIDENT_STATUS_RESULT",
-
-      reply:
-`Incident Status
-
-Incident:
-${incident.number}
-
-State:
-${incident.stateLabel || incident.state}
-
-Priority:
-${incident.priorityLabel || incident.priority}
-
-Assignment Group:
-${incident.assignmentGroup || "N/A"}
-
-Created:
-${incident.created}
-`,
-    };
-  }
-
   return {
-
-    type:
-      "INCIDENT_STATUS",
+    type: "INCIDENT_STATUS",
 
     reply:
-      "Please provide your incident number to check the status.",
+`I'd be happy to help.
+
+Please provide either:
+
+• Incident Number (INCxxxxxxx)
+
+OR
+
+• Your ISID`
+  };
+}
+
+/**
+ * =========================================
+ * GENERIC STATUS QUERY
+ * =========================================
+ */
+if (
+  classification.intent ===
+  "STATUS_QUERY"
+) {
+
+  return {
+    type: "STATUS_QUERY",
+
+    reply:
+`Please provide one of the following:
+
+• User ID (ISID)
+
+OR
+
+• Incident Number (INCxxxxxxx)
+
+OR
+
+• Request Number (REQxxxxxxx)`
   };
 }
 

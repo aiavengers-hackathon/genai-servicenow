@@ -18,11 +18,41 @@ async function createIncident(data) {
   try {
 
     logger.info(
-      "Creating incident"
+      "Creating incident",
+      {
+        userId: data.userId
+      }
     );
 
-    return await incidentService
-      .createIncident(data);
+    let callerId = "";
+
+    if (data.userId) {
+
+      const user =
+        await requestService.getUserByUsername(
+          data.userId
+        );
+
+      if (user) {
+
+        callerId =
+          user.sys_id;
+
+        logger.info(
+          "Caller resolved",
+          {
+            username:
+              data.userId,
+            callerId
+          }
+        );
+      }
+    }
+
+    return await incidentService.createIncident({
+      ...data,
+      caller_id: callerId
+    });
 
   } catch (error) {
 
@@ -36,7 +66,6 @@ async function createIncident(data) {
     throw error;
   }
 }
-
 /**
  * CREATE ACCESS REQUEST
  *

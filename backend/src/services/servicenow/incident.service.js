@@ -709,7 +709,7 @@ class IncidentService {
           `${this.baseURL}${this.apiEndpoint}`,
           this.getConfig({
             sysparm_query:
-              `caller_id=${callerId}`,
+  `caller_id=${callerId}^ORopened_by=${callerId}`,
 
             sysparm_limit:
               limit,
@@ -859,6 +859,130 @@ class IncidentService {
       }
     );
   }
+  async getUserIncidentsByUsername(username) {
+
+  try {
+
+    const normalizedUsername =
+      String(username || "")
+        .trim()
+        .toLowerCase();
+
+    const userResponse =
+      await axios.get(
+        `${this.baseURL}/api/now/table/sys_user`,
+        {
+          params: {
+            sysparm_query:
+              `user_name=${normalizedUsername}`,
+            sysparm_limit: 1
+          },
+          auth: this.auth
+        }
+      );
+
+    const users =
+      userResponse.data.result || [];
+
+    if (!users.length) {
+
+      logger.warn(
+        "User not found in ServiceNow",
+        { username: normalizedUsername }
+      );
+
+      return [];
+    }
+
+    const userSysId =
+      users[0].sys_id;
+
+    logger.info(
+      "User found",
+      {
+        username: normalizedUsername,
+        userSysId
+      }
+    );
+
+    const response =
+      await axios.get(
+        `${this.baseURL}${this.apiEndpoint}`,
+        {
+          params: {
+            sysparm_query:
+              
+  `caller_id=${userSysId}^ORopened_by=${userSysId}`,
+            sysparm_limit: 20,
+            sysparm_orderby_desc:
+              "sys_created_on",
+            sysparm_fields:
+              "number,state,priority,short_description,sys_created_on"
+          },
+          auth: this.auth
+        }
+      );
+
+    const incidents =
+      response.data.result || [];
+
+    console.log(
+  "INCIDENTS FOUND:",
+  JSON.stringify(
+    incidents,
+    null,
+    2
+  )
+);
+
+logger.info(
+  "Incidents found",
+  {
+    count: incidents.length
+  }
+);
+return incidents.map(
+      (incident) => ({
+        number:
+          incident.number,
+
+        state:
+          incident.state,
+
+        stateLabel:
+          this.getReadableState(
+            incident.state
+          ),
+
+        priority:
+          incident.priority,
+
+        priorityLabel:
+          this.getReadablePriority(
+            incident.priority
+          ),
+
+        shortDescription:
+          incident.short_description,
+
+        created:
+          incident.sys_created_on
+      })
+    );
+
+  } catch (error) {
+
+    logger.error(
+      "User incident lookup failed",
+      {
+        username,
+        error: error.message
+      }
+    );
+
+    return [];
+  }
+}
 }
 
 module.exports =
