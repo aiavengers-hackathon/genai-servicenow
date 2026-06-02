@@ -20,38 +20,40 @@ async function createIncident(data) {
     logger.info(
       "Creating incident",
       {
-        userId: data.userId
+        username: data.username,
       }
     );
 
     let callerId = "";
 
-    if (data.userId) {
+    if (data.username) {
 
       const user =
         await requestService.getUserByUsername(
-          data.userId
+          data.username
         );
 
-      if (user) {
+      if (!user) {
 
-        callerId =
-          user.sys_id;
-
-        logger.info(
-          "Caller resolved",
-          {
-            username:
-              data.userId,
-            callerId
-          }
+        throw new Error(
+          `User ${data.username} not found in ServiceNow`
         );
       }
+
+      callerId = user.sys_id;
+
+      logger.info(
+        "Caller resolved",
+        {
+          username: data.username,
+          callerId,
+        }
+      );
     }
 
     return await incidentService.createIncident({
       ...data,
-      caller_id: callerId
+      caller_id: callerId,
     });
 
   } catch (error) {

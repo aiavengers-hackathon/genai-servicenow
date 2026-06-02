@@ -1,0 +1,6 @@
+{"timestamp":"2026-06-02T17:06:39.577Z","action":"REQUEST_CREATED","userId":"user-1779737240253-sn4048nep","requestNumber":"REQ0010034","requestId":"8d6b566083dd07d0a8e4b0d6feaad380","application":"DDAS","status":"SUCCESS"}
+{"timestamp":"2026-06-02T17:44:31.123Z","action":"INCIDENT_CREATION_FAILED","userId":"user-1779737240253-sn4048nep","error":"Failed to create incident","status":"FAILED"}
+{"timestamp":"2026-06-02T17:45:16.647Z","action":"INCIDENT_CREATION_FAILED","userId":"user-1779737240253-sn4048nep","error":"Failed to create incident","status":"FAILED"}
+{"timestamp":"2026-06-02T17:55:31.893Z","action":"INCIDENT_CREATION_FAILED","userId":"user-1779737240253-sn4048nep","error":"Failed to create incident","status":"FAILED"}
+{"timestamp":"2026-06-02T17:59:29.555Z","action":"API_ERROR","endpoint":"/chat/message","error":"Failed to create incident","userId":"user-1779737240253-sn4048nep","status":"ERROR"}
+{"timestamp":"2026-06-02T18:02:24.656Z","action":"INCIDENT_CREATED","userId":"user-1779737240253-sn4048nep","incidentNumber":"INC0010035","incidentId":"e128ae68831147d0a8e4b0d6feaad310","priority":"1","application":"BAAMR","status":"SUCCESS"}

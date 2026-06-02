@@ -307,6 +307,34 @@ class IncidentService {
         }
       );
 
+      let callerSysId = "";
+
+if (data.username) {
+
+  const user =
+    await this.getUserByUsername(
+      data.username
+    );
+
+  if (!user) {
+
+    return {
+      notSnowUser: true,
+      username: data.username
+    };
+  }
+
+  callerSysId =
+    user.sys_id;
+
+  logger.info(
+    "Caller found",
+    {
+      username: data.username,
+      callerSysId
+    }
+  );
+}
       /**
        * AI PRIORITY ANALYSIS
        */
@@ -423,6 +451,7 @@ class IncidentService {
           "",
 
         caller_id:
+          callerSysId ||
           data.caller_id ||
           "",
 
@@ -982,7 +1011,46 @@ return incidents.map(
 
     return [];
   }
+
 }
+
+/**
+ * GET USER BY USERNAME
+ */
+async getUserByUsername(username) {
+  try {
+    const normalizedUsername = String(username || "")
+      .trim()
+      .toLowerCase();
+
+    const response = await axios.get(
+      `${this.baseURL}/api/now/table/sys_user`,
+      {
+        params: {
+          sysparm_query: `user_name=${normalizedUsername}`,
+          sysparm_limit: 1,
+        },
+        auth: this.auth,
+      }
+    );
+
+    const users = response.data.result || [];
+
+    if (!users.length) {
+      return null;
+    }
+
+    return users[0];
+  } catch (error) {
+    logger.error("User lookup failed", {
+      username,
+      error: error.response?.data || error.message,
+    });
+
+    return null;
+  }
+}
+
 }
 
 module.exports =

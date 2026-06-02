@@ -322,27 +322,50 @@ Type CONFIRM to create access request.
       /**
        * ASK APPLICATION FOR INCIDENT
        */
-      if (
-        session.workflow === "incident" &&
-        session.awaitingField === "application"
-      ) {
+if (
+  session.workflow === "incident" &&
+  session.awaitingField === "application"
+) {
 
-        session.collectedData.application =
-          text;
+  session.collectedData.application =
+    text;
 
-        session.awaitingField =
-          "details";
+  session.awaitingField =
+    "username";
 
-        return res.json({
-          reply:
-`
+  return res.json({
+    reply: `
 Application captured:
+${text}
+
+Please provide your ISID / Username.
+`,
+  });
+}
+
+/**
+ * INCIDENT USERNAME
+ */
+if (
+  session.workflow === "incident" &&
+  session.awaitingField === "username"
+) {
+
+  session.collectedData.username =
+    text;
+
+  session.awaitingField =
+    "details";
+
+  return res.json({
+    reply: `
+Username captured:
 ${text}
 
 Please provide complete issue details.
 `,
-        });
-      }
+  });
+}
 
       /**
        * INCIDENT DETAILS
@@ -449,7 +472,15 @@ Type CONFIRM to create incident.
                 ...session.collectedData,
                 userId,
               });
+if (incident.notSnowUser) {
 
+  clearSession(userId);
+
+  return res.json({
+    reply:
+      `User ${incident.username} not found in ServiceNow.`
+  });
+}
             // Audit log
             await AuditLogger.logIncidentCreation(userId, session.collectedData, incident);
             const duration = Date.now() - startTime;
@@ -477,17 +508,31 @@ ${process.env.SN_INSTANCE}/nav_to.do?uri=incident.do?sys_id=${incident.sys_id}
 `,
             });
           } catch (error) {
-            await AuditLogger.logIncidentCreationFailure(userId, session.collectedData, error);
-            metricsCollector.recordIncidentCreationFailed();
-            logger.error("Incident creation failed", { error: error.message });
 
-            return res.json({
-              success: false,
-              reply: `Failed to create incident: ${error.message}`,
-            });
+  console.error(
+    "SERVICENOW ERROR:",
+    JSON.stringify(
+      error.response?.data,
+      null,
+      2
+    )
+  );
+
+  logger.error(
+    "Incident creation failed",
+    {
+      error:
+        error.response?.data ||
+        error.message,
+    }
+  );
+
+  throw new Error(
+    error.response?.data?.error?.message ||
+    error.message
+  );
           }
         }
-
         /**
          * CREATE ACCESS REQUEST
          */
@@ -896,40 +941,39 @@ Please provide your username / ISID.
       /**
        * INCIDENT START
        */
-      if (
-        response.type ===
-        "READY_TO_CREATE_INCIDENT"
-      ) {
+if (
+  response.type ===
+  "READY_TO_CREATE_INCIDENT"
+) {
 
-        session.workflow =
-          "incident";
+  session.workflow =
+    "incident";
 
-        session.awaitingField =
-          "details";
+  session.awaitingField =
+    "username";
 
-        session.collectedData = {
+  session.collectedData = {
 
-          short_description:
-            response.incident.title,
+    short_description:
+      response.incident.title,
 
-          application:
-            response.incident.application,
+    application:
+      response.incident.application,
 
-          assignment_group:
-            response.incident.assignmentGroup,
-        };
+    assignment_group:
+      response.incident.assignmentGroup,
+  };
 
-        return res.json({
-          reply:
-`
+  return res.json({
+    reply: `
 Incident detected for:
 ${response.incident.application}
 
-Please provide complete issue details.
+Please provide your ISID / Username.
 `,
-        });
-      }
-
+  });
+}
+      
       /**
        * DEFAULT RESPONSE
        */
