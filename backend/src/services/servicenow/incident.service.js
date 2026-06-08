@@ -658,7 +658,10 @@ if (data.username) {
 
       const incident =
         response.data.result?.[0];
-
+      const latestNote =
+  await this.getLatestWorkNote(
+    incident.sys_id
+  );
       if (!incident) {
         throw new Error(
           `Incident ${incidentNumber} not found`
@@ -711,6 +714,10 @@ if (data.username) {
 
         updated:
           incident.sys_updated_on,
+        
+        latestWorkNote:
+    latestNote?.value ||
+    "No updates available"  
       };
     } catch (error) {
       logger.error(
@@ -1050,7 +1057,32 @@ async getUserByUsername(username) {
     return null;
   }
 }
+async getLatestWorkNote(sysId) {
 
+  try {
+
+    const response =
+      await axios.get(
+        `${this.baseURL}/api/now/table/sys_journal_field`,
+        this.getConfig({
+          sysparm_query:
+            `element_id=${sysId}^ORDERBYDESCsys_created_on`,
+          sysparm_limit: 1
+        })
+      );
+
+    return response.data.result?.[0] || null;
+
+  } catch (error) {
+
+    logger.error(
+      "Work note lookup failed",
+      { error: error.message }
+    );
+
+    return null;
+  }
+}
 }
 
 module.exports =

@@ -638,16 +638,21 @@ if (session.awaitingStatusInput) {
       clearSession(userId);
 
       return res.json({
-        reply: `
+  reply: `
 Incident Status
 
 Number: ${incident.number}
 State: ${incident.stateLabel}
 Priority: ${incident.priorityLabel}
 Assignment Group: ${incident.assignmentGroup || "N/A"}
-Created: ${incident.created}
-        `,
-      });
+
+Latest Update:
+${incident.latestWorkNote || "No work notes available"}
+
+Created:
+${incident.created}
+`,
+});
     }
 
     // REQUEST NUMBER
@@ -659,15 +664,25 @@ Created: ${incident.created}
       clearSession(userId);
 
       return res.json({
-        reply: `
+  reply: `
 Request Status
 
-Number: ${request.number}
-State: ${request.state}
-Priority: ${request.priority}
-Created: ${request.created}
-        `,
-      });
+Number:
+${request.number}
+
+State:
+${request.state}
+
+Priority:
+${request.priority}
+
+Latest Update:
+${request.latestWorkNote}
+
+Created:
+${request.created}
+`,
+});
     }
 
   /**

@@ -888,80 +888,101 @@ class RequestService {
   /**
    * GET REQUEST STATUS
    */
-  async getRequestStatus(
-    requestNumber
-  ) {
+  /**
+ * GET REQUEST STATUS
+ */
+async getRequestStatus(requestNumber) {
 
-    try {
+  try {
 
-      const response =
-        await axios.get(
-
-          `${this.baseURL}${this.requestEndpoint}`,
-
-          {
-            params: {
-
-              sysparm_query:
-                `number=${requestNumber}`,
-
-              sysparm_limit: 1,
-            },
-
-            auth: this.auth,
-          }
-        );
-
-      const request =
-        response.data.result[0];
-
-      if (!request) {
-
-        throw new Error(
-          "Request not found"
-        );
-      }
-
-      return {
-
-        number:
-          request.number,
-
-        state:
-          this.getReadableState(
-            request.state,
-            request.stage
-          ),
-
-        priority:
-          this.getReadablePriority(
-            request.priority
-          ),
-
-        rawState:
-          request.state,
-
-        rawStage:
-          request.stage,
-
-        created:
-          request.sys_created_on,
-      };
-
-    } catch (error) {
-
-      logger.error(
-        "Get request status failed",
+    const response =
+      await axios.get(
+        `${this.baseURL}${this.requestEndpoint}`,
         {
-          error:
-            error.message,
+          params: {
+            sysparm_query:
+              `number=${requestNumber}`,
+
+            sysparm_limit: 1,
+
+            sysparm_fields:
+              "sys_id,number,state,stage,priority,sys_created_on"
+          },
+
+          auth: this.auth
         }
       );
 
-      throw error;
-    }
-  }
+    const request =
+      response.data.result?.[0];
 
+    if (!request) {
+
+      throw new Error(
+        "Request not found"
+      );
+    }
+
+    /**
+     * GET LATEST RITM UPDATE
+     */
+    let latestUpdate =
+  await this.getLatestRequestJournal(
+    request.sys_id
+  );
+
+if (
+  latestUpdate ===
+  "No updates available"
+) {
+
+  latestUpdate =
+    await this.getLatestRitmUpdate(
+      request.sys_id
+    );
+}
+    return {
+
+      number:
+        request.number,
+
+      state:
+        this.getReadableState(
+          request.state,
+          request.stage
+        ),
+
+      priority:
+        this.getReadablePriority(
+          request.priority
+        ),
+
+      rawState:
+        request.state,
+
+      rawStage:
+        request.stage,
+
+      created:
+        request.sys_created_on,
+
+      latestWorkNote:
+        latestUpdate
+    };
+
+  } catch (error) {
+
+    logger.error(
+      "Get request status failed",
+      {
+        error:
+          error.message
+      }
+    );
+
+    throw error;
+  }
+}
   /**
    * GET USER REQUESTS
    */
@@ -1134,6 +1155,165 @@ async getUserByUsername(username) {
     );
 
     return null;
+  }
+}
+async getLatestRitmUpdate(requestSysId) {
+
+  try {
+
+    /**
+     * Find RITM
+     */
+    const ritmResponse =
+      await axios.get(
+        `${this.baseURL}/api/now/table/sc_req_item`,
+        {
+          params: {
+            sysparm_query:
+              `request=${requestSysId}`,
+
+            sysparm_limit: 1,
+
+            sysparm_fields:
+              "sys_id,number"
+          },
+
+          auth: this.auth
+        }
+      );
+
+    const ritm =
+      ritmResponse.data.result?.[0];
+
+    if (!ritm) {
+
+      return "No RITM found";
+    }
+
+    console.log(
+      "RITM FOUND:",
+      ritm.number
+    );
+
+    /**
+     * Get latest comments/work notes
+     */
+    const journalResponse =
+      await axios.get(
+        `${this.baseURL}/api/now/table/sys_journal_field`,
+        {
+          params: {
+            sysparm_query:
+              `element_id=${ritm.sys_id}^ORDERBYDESCsys_created_on`,
+
+            sysparm_limit: 5,
+
+            sysparm_fields:
+              "value,element,sys_created_on"
+          },
+
+          auth: this.auth
+        }
+      );
+
+    const entries =
+      journalResponse.data.result || [];
+
+    console.log(
+      "JOURNAL ENTRIES:",
+      JSON.stringify(entries, null, 2)
+    );
+
+    if (!entries.length) {
+
+      return "No updates available";
+    }
+
+    return entries[0].value;
+
+  } catch (error) {
+
+    logger.error(
+      "RITM update lookup failed",
+      {
+        error:
+          error.message
+      }
+    );
+
+    return "No updates available";
+  }
+}
+async getRequestRITM(requestSysId) {
+
+  const response = await axios.get(
+    `${this.baseURL}/api/now/table/sc_req_item`,
+    {
+      params: {
+        sysparm_query: `request=${requestSysId}`,
+        sysparm_limit: 1,
+        sysparm_fields: "sys_id,number"
+      },
+      auth: this.auth
+    }
+  );
+
+  return response.data.result || [];
+}
+async getLatestJournalEntry(recordSysId) {
+
+  const response = await axios.get(
+    `${this.baseURL}/api/now/table/sys_journal_field`,
+    {
+      params: {
+        sysparm_query:
+          `element_id=${recordSysId}^ORDERBYDESCsys_created_on`,
+        sysparm_limit: 1,
+        sysparm_fields:
+          "value,element,sys_created_on"
+      },
+      auth: this.auth
+    }
+  );
+
+  return response.data.result?.[0] || null;
+}
+async getLatestRequestJournal(requestSysId) {
+
+  try {
+
+    const response =
+      await axios.get(
+        `${this.baseURL}/api/now/table/sys_journal_field`,
+        {
+          params: {
+            sysparm_query:
+              `element_id=${requestSysId}^ORDERBYDESCsys_created_on`,
+            sysparm_limit: 1,
+            sysparm_fields:
+              "value,element,sys_created_on"
+          },
+          auth: this.auth
+        }
+      );
+
+    const entries =
+      response.data.result || [];
+
+    return entries.length
+      ? entries[0].value
+      : "No updates available";
+
+  } catch (error) {
+
+    logger.error(
+      "Journal lookup failed",
+      {
+        error: error.message
+      }
+    );
+
+    return "No updates available";
   }
 }
 }
