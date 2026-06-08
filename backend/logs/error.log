@@ -1,0 +1,17 @@
+{"error":"this.getUserByUsername is not a function","level":"error","message":"Incident creation failed","service":"genai-servicenow","timestamp":"2026-06-02 17:44:31"}
+{"error":"Failed to create incident","level":"error","message":"Incident creation failed","service":"genai-servicenow","timestamp":"2026-06-02 17:44:31"}
+{"action":"INCIDENT_CREATION_FAILED","error":"Failed to create incident","level":"error","message":"Incident creation failed","service":"genai-servicenow","status":"FAILED","timestamp":"2026-06-02T17:44:31.123Z","userId":"user-1779737240253-sn4048nep"}
+{"error":"Failed to create incident","level":"error","message":"Incident creation failed","service":"genai-servicenow","timestamp":"2026-06-02 17:44:31"}
+{"error":"this.getUserByUsername is not a function","level":"error","message":"Incident creation failed","service":"genai-servicenow","timestamp":"2026-06-02 17:45:16"}
+{"error":"Failed to create incident","level":"error","message":"Incident creation failed","service":"genai-servicenow","timestamp":"2026-06-02 17:45:16"}
+{"action":"INCIDENT_CREATION_FAILED","error":"Failed to create incident","level":"error","message":"Incident creation failed","service":"genai-servicenow","status":"FAILED","timestamp":"2026-06-02T17:45:16.647Z","userId":"user-1779737240253-sn4048nep"}
+{"error":"Failed to create incident","level":"error","message":"Incident creation failed","service":"genai-servicenow","timestamp":"2026-06-02 17:45:16"}
+{"error":"this.getUserByUsername is not a function","level":"error","message":"Incident creation failed","service":"genai-servicenow","timestamp":"2026-06-02 17:55:31"}
+{"error":"Failed to create incident","level":"error","message":"Incident creation failed","service":"genai-servicenow","timestamp":"2026-06-02 17:55:31"}
+{"action":"INCIDENT_CREATION_FAILED","error":"Failed to create incident","level":"error","message":"Incident creation failed","service":"genai-servicenow","status":"FAILED","timestamp":"2026-06-02T17:55:31.893Z","userId":"user-1779737240253-sn4048nep"}
+{"error":"Failed to create incident","level":"error","message":"Incident creation failed","service":"genai-servicenow","timestamp":"2026-06-02 17:55:31"}
+{"error":"this.getUserByUsername is not a function","level":"error","message":"Incident creation failed","service":"genai-servicenow","timestamp":"2026-06-02 17:59:29"}
+{"error":"Failed to create incident","level":"error","message":"Incident creation failed","service":"genai-servicenow","timestamp":"2026-06-02 17:59:29"}
+{"error":"Failed to create incident","level":"error","message":"Incident creation failed","service":"genai-servicenow","timestamp":"2026-06-02 17:59:29"}
+{"error":"Failed to create incident","level":"error","message":"Chat message processing failed","service":"genai-servicenow","stack":"Error: Failed to create incident\n    at D:\\GenAI Hackathon\\genai-servicenow\\backend\\src\\api\\routes\\chat.routes.js:530:9\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","timestamp":"2026-06-02 17:59:29","userId":"user-1779737240253-sn4048nep"}
+{"action":"API_ERROR","endpoint":"/chat/message","error":"Failed to create incident","level":"error","message":"API error logged","service":"genai-servicenow","status":"ERROR","timestamp":"2026-06-02T17:59:29.555Z","userId":"user-1779737240253-sn4048nep"}
